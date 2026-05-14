@@ -282,9 +282,8 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
-	lang := common.ResolveEmailLanguage(c.GetHeader("Accept-Language"))
-	subject := common.BuildVerificationEmailSubject(lang)
-	content, err := common.BuildVerificationEmailContent(lang, code)
+	subject := common.BuildVerificationEmailSubject(common.EmailLanguageEn)
+	content, err := common.BuildVerificationEmailContent(common.EmailLanguageEn, code)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -314,9 +313,8 @@ func SendPasswordResetEmail(c *gin.Context) {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
 		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
-		lang := common.ResolveEmailLanguage(c.GetHeader("Accept-Language"))
-		subject := common.BuildPasswordResetEmailSubject(lang)
-		content, err := common.BuildPasswordResetEmailContent(lang, link)
+		subject := common.BuildPasswordResetEmailSubject(common.EmailLanguageEn)
+		content, err := common.BuildPasswordResetEmailContent(common.EmailLanguageEn, link)
 		if err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("failed to build password reset email for %s: %s", email, err.Error()))
 			c.JSON(http.StatusOK, gin.H{

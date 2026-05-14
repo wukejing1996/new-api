@@ -114,59 +114,39 @@ func newEmailTemplateData(lang string, title string) emailTemplateData {
 }
 
 func BuildVerificationEmailSubject(lang string) string {
-	if lang == EmailLanguageEn {
-		return fmt.Sprintf("%s Email Verification Code", emailDisplayName())
-	}
-	return fmt.Sprintf("%s 邮箱验证码", emailDisplayName())
+	return fmt.Sprintf("%s Email Verification Code", emailDisplayName())
 }
 
 func BuildVerificationEmailContent(lang string, code string) (string, error) {
+	lang = EmailLanguageEn
 	data := newEmailTemplateData(lang, BuildVerificationEmailSubject(lang))
 	data.CodeDigits = verificationCodeDigits(code)
-	if lang == EmailLanguageEn {
-		data.Heading = "Email verification code"
-		data.Intro = "You are verifying your email address. Your verification code is"
-		data.ExpireNotice = fmt.Sprintf("This code is valid for %d minutes. Please enter it as soon as possible.", VerificationValidMinutes)
-		data.IgnoreNotice = "If you did not request this, please ignore this email. If you have any questions, contact official support."
-		return renderEmailTemplate(verificationEmailTemplate, data)
-	}
-	data.Heading = "邮箱验证码"
-	data.Intro = "您正在进行邮箱验证操作，验证码是"
-	data.ExpireNotice = fmt.Sprintf("有效期为%d分钟，请尽快填写。", VerificationValidMinutes)
-	data.IgnoreNotice = "如非本人操作，请忽略本邮件。如有问题，请及时联系官方客服。"
+	data.Heading = "Email verification code"
+	data.Intro = "You are verifying your email address. Your verification code is"
+	data.ExpireNotice = fmt.Sprintf("This code is valid for %d minutes. Please enter it as soon as possible.", VerificationValidMinutes)
+	data.IgnoreNotice = "If you did not request this, please ignore this email. If you have any questions, contact official support."
 	return renderEmailTemplate(verificationEmailTemplate, data)
 }
 
 func BuildPasswordResetEmailSubject(lang string) string {
-	if lang == EmailLanguageEn {
-		return fmt.Sprintf("%s Password Reset", emailDisplayName())
-	}
-	return fmt.Sprintf("%s 密码重置", emailDisplayName())
+	return fmt.Sprintf("%s Password Reset", emailDisplayName())
 }
 
 func BuildPasswordResetEmailContent(lang string, resetLink string) (string, error) {
+	lang = EmailLanguageEn
 	data := newEmailTemplateData(lang, BuildPasswordResetEmailSubject(lang))
 	data.ResetLink = resetLink
-	if lang == EmailLanguageEn {
-		data.Heading = "Password reset"
-		data.Intro = "You requested a password reset. Click the button below to continue."
-		data.ResetLinkText = "Reset password"
-		data.ResetCopyNotice = "If the button does not work, copy and paste this link into your browser:"
-		data.ExpireNotice = fmt.Sprintf("This reset link is valid for %d minutes.", VerificationValidMinutes)
-		data.IgnoreNotice = "If you did not request this, please ignore this email. Your account remains unchanged."
-		return renderEmailTemplate(passwordResetEmailTemplate, data)
-	}
-	data.Heading = "密码重置"
-	data.Intro = "您正在进行密码重置操作，请点击下方按钮继续。"
-	data.ResetLinkText = "重置密码"
-	data.ResetCopyNotice = "如果按钮无法点击，请复制以下链接到浏览器打开："
-	data.ExpireNotice = fmt.Sprintf("重置链接有效期为%d分钟。", VerificationValidMinutes)
-	data.IgnoreNotice = "如非本人操作，请忽略本邮件，您的账号不会被修改。"
+	data.Heading = "Password reset"
+	data.Intro = "You requested a password reset. Click the button below to continue."
+	data.ResetLinkText = "Reset password"
+	data.ResetCopyNotice = "If the button does not work, copy and paste this link into your browser:"
+	data.ExpireNotice = fmt.Sprintf("This reset link is valid for %d minutes.", VerificationValidMinutes)
+	data.IgnoreNotice = "If you did not request this, please ignore this email. Your account remains unchanged."
 	return renderEmailTemplate(passwordResetEmailTemplate, data)
 }
 
 func BuildNotificationEmailContent(title string, content string) (string, error) {
-	data := newEmailTemplateData(EmailLanguageZh, title)
+	data := newEmailTemplateData(EmailLanguageEn, title)
 	data.Heading = title
 	data.Content = template.HTML(content)
 	return renderEmailTemplate(notificationEmailTemplate, data)
