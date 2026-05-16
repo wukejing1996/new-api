@@ -935,7 +935,7 @@ func ManageUser(c *gin.Context) {
 				return
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
-				fmt.Sprintf("管理员增加用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
+				fmt.Sprintf("Admin increased user quota by %s quota", logger.FormatQuota(req.Value)), adminInfo)
 		case "subtract":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
@@ -946,7 +946,7 @@ func ManageUser(c *gin.Context) {
 				return
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
-				fmt.Sprintf("管理员减少用户额度 %s", logger.LogQuota(req.Value)), adminInfo)
+				fmt.Sprintf("Admin decreased user quota by %s quota", logger.FormatQuota(req.Value)), adminInfo)
 		case "override":
 			oldQuota := user.Quota
 			if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
@@ -954,7 +954,7 @@ func ManageUser(c *gin.Context) {
 				return
 			}
 			model.RecordLogWithAdminInfo(user.Id, model.LogTypeManage,
-				fmt.Sprintf("管理员覆盖用户额度从 %s 为 %s", logger.LogQuota(oldQuota), logger.LogQuota(req.Value)), adminInfo)
+				fmt.Sprintf("Admin changed user quota from %s quota to %s quota", logger.FormatQuota(oldQuota), logger.FormatQuota(req.Value)), adminInfo)
 		default:
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return

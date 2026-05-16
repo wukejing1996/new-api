@@ -35,12 +35,12 @@ import { parseUserSettings } from '../lib'
 import type { UserProfile } from '../types'
 
 const LANGUAGE_OPTIONS = [
-  { value: 'zh', label: '简体中文' },
+  { value: 'zh', label: 'Simplified Chinese' },
   { value: 'en', label: 'English' },
-  { value: 'fr', label: 'Français' },
-  { value: 'ru', label: 'Русский' },
-  { value: 'ja', label: '日本語' },
-  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'fr', label: 'French' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'vi', label: 'Vietnamese' },
 ] as const
 
 function normalizeLanguage(value?: string | null): string {

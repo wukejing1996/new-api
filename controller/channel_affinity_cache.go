@@ -36,7 +36,7 @@ func ClearChannelAffinityCache(c *gin.Context) {
 	if ruleName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": "缺少参数：rule_name，或使用 all=true 清空全部",
+			"message": "Missing parameter: rule_name, or use all=true to clear everything",
 		})
 		return
 	}

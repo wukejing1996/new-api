@@ -27,7 +27,7 @@ services:
     volumes:
       - dev_data:/data
     environment:
-      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api
+      - SQL_DSN=postgresql://${DEV_POSTGRES_USER:-root}:${DEV_POSTGRES_PASSWORD:-change-me}@postgres:5432/${DEV_POSTGRES_DB:-new-api}
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - BATCH_UPDATE_ENABLED=true
@@ -38,6 +38,11 @@ services:
         condition: service_healthy
     networks:
       - dev-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "15"
 
   redis:
     image: redis:7-alpine
@@ -45,15 +50,20 @@ services:
     restart: unless-stopped
     networks:
       - dev-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "15"
 
   postgres:
     image: postgres:15-alpine
     container_name: new-api-dev-pg
     restart: unless-stopped
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: new-api
+      POSTGRES_USER: ${DEV_POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${DEV_POSTGRES_DB:-new-api}
     volumes:
       - dev_pg_data:/var/lib/postgresql/data
     networks:
@@ -63,6 +73,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "15"
 
 volumes:
   dev_data:

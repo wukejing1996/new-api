@@ -202,9 +202,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 									task.Quota = actualQuota // 更新任务记录的实际扣费额度
 
 									// 记录消费日志
-									logContent := fmt.Sprintf("视频任务成功补扣费，模型倍率 %.2f，分组倍率 %.2f，tokens %d，预扣费 %s，实际扣费 %s，补扣费 %s",
+									logContent := fmt.Sprintf("Video task post-charge succeeded, model ratio %.2f, group ratio %.2f, tokens %d, pre-consumed %s quota, actual cost %s quota, post-charge %s quota",
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
-										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(quotaDelta))
+										logger.FormatQuota(preConsumedQuota), logger.FormatQuota(actualQuota), logger.FormatQuota(quotaDelta))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 								}
 							} else if quotaDelta < 0 {
@@ -223,9 +223,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 									task.Quota = actualQuota // 更新任务记录的实际扣费额度
 
 									// 记录退款日志
-									logContent := fmt.Sprintf("视频任务成功退还多扣费用，模型倍率 %.2f，分组倍率 %.2f，tokens %d，预扣费 %s，实际扣费 %s，退还 %s",
+									logContent := fmt.Sprintf("Video task overcharge refund succeeded, model ratio %.2f, group ratio %.2f, tokens %d, pre-consumed %s quota, actual cost %s quota, refund %s quota",
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
-										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(refundQuota))
+										logger.FormatQuota(preConsumedQuota), logger.FormatQuota(actualQuota), logger.FormatQuota(refundQuota))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 								}
 							} else {
@@ -271,7 +271,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if err := model.IncreaseUserQuota(task.UserId, quota, false); err != nil {
 			logger.LogWarn(ctx, "Failed to increase user quota: "+err.Error())
 		}
-		logContent := fmt.Sprintf("Video async task failed %s, refund %s", task.TaskID, logger.LogQuota(quota))
+		logContent := fmt.Sprintf("Video async task failed %s, refund %s quota", task.TaskID, logger.FormatQuota(quota))
 		model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 	}
 
