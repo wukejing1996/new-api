@@ -27,7 +27,7 @@ services:
     volumes:
       - dev_data:/data
     environment:
-      - SQL_DSN=postgresql://${DEV_POSTGRES_USER:-root}:${DEV_POSTGRES_PASSWORD:-change-me}@postgres:5432/${DEV_POSTGRES_DB:-new-api}
+      - SQL_DSN=postgresql://${NEW_API_DEV_POSTGRES_USER:-root}:${NEW_API_DEV_POSTGRES_PASSWORD:-change-me}@postgres:5432/${NEW_API_DEV_POSTGRES_DB:-new-api}
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - BATCH_UPDATE_ENABLED=true
@@ -61,9 +61,9 @@ services:
     container_name: new-api-dev-pg
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DEV_POSTGRES_USER:-root}
-      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:-change-me}
-      POSTGRES_DB: ${DEV_POSTGRES_DB:-new-api}
+      POSTGRES_USER: ${NEW_API_DEV_POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${NEW_API_DEV_POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${NEW_API_DEV_POSTGRES_DB:-new-api}
     volumes:
       - dev_pg_data:/var/lib/postgresql/data
     networks:
