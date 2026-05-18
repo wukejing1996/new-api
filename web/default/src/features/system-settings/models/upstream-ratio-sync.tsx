@@ -22,6 +22,14 @@ import { CheckSquare, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -145,6 +153,8 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   const queryClient = useQueryClient()
 
   const [channelDialogOpen, setChannelDialogOpen] = useState(false)
+  const [priceConversionDialogOpen, setPriceConversionDialogOpen] =
+    useState(false)
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
   const [selectedChannelIds, setSelectedChannelIds] = useState<number[]>([])
   const [channelEndpoints, setChannelEndpoints] = useState<
@@ -466,7 +476,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     return entry ? entry[0] : 'Unknown'
   }
 
-  const handleApplySync = () => {
+  const executeApplySync = () => {
     if (!isPriceConversionRateValid) {
       toast.warning(t('Price conversion rate must be greater than 0'))
       return
@@ -526,6 +536,19 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     performSync(currentRatios)
   }
 
+  const handleApplySync = () => {
+    setPriceConversionDialogOpen(true)
+  }
+
+  const handleConfirmPriceConversion = () => {
+    if (!isPriceConversionRateValid) {
+      toast.warning(t('Price conversion rate must be greater than 0'))
+      return
+    }
+    setPriceConversionDialogOpen(false)
+    executeApplySync()
+  }
+
   const handleConfirmConflict = async () => {
     setConfirmLoading(true)
     try {
@@ -546,28 +569,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
   return (
     <div className='space-y-4'>
-      <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
-        <div className='grid gap-1.5 lg:max-w-xl'>
-          <Label htmlFor='upstream-price-conversion-rate'>
-            {t('Price conversion rate')}
-          </Label>
-          <Input
-            id='upstream-price-conversion-rate'
-            type='number'
-            min='0.000001'
-            step='0.000001'
-            value={priceConversionRate}
-            onChange={(event) => setPriceConversionRate(event.target.value)}
-            disabled={isLoading}
-            aria-invalid={!isPriceConversionRateValid}
-            className='max-w-xs'
-          />
-          <p className='text-muted-foreground text-xs'>
-            {t(
-              'When applying sync, divide selected absolute prices by this rate before saving. Example: if upstream prices are CNY and 1 USD = 7.3 CNY, enter 7.3 to save USD prices.'
-            )}
-          </p>
-        </div>
+      <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <div className='flex flex-col gap-2 sm:flex-row'>
           <Button onClick={handleOpenChannelDialog} disabled={isLoading}>
             <RefreshCcw className='mr-2 h-4 w-4' />
@@ -576,7 +578,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
           <Button
             variant='secondary'
             onClick={handleApplySync}
-            disabled={!hasSelections || isLoading || !isPriceConversionRateValid}
+            disabled={!hasSelections || isLoading}
           >
             {(isSyncPending || confirmLoading) && (
               <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
@@ -606,6 +608,50 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         onChannelEndpointsChange={setChannelEndpoints}
         onConfirm={handleConfirmChannelSelection}
       />
+
+      <Dialog
+        open={priceConversionDialogOpen}
+        onOpenChange={setPriceConversionDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('Price conversion rate')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'When applying sync, divide selected absolute prices by this rate before saving. Example: if upstream prices are CNY and 1 USD = 7.3 CNY, enter 7.3 to save USD prices.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className='grid gap-2'>
+            <Label htmlFor='apply-sync-price-conversion-rate'>
+              {t('Price conversion rate')}
+            </Label>
+            <Input
+              id='apply-sync-price-conversion-rate'
+              type='number'
+              min='0.000001'
+              step='0.000001'
+              value={priceConversionRate}
+              onChange={(event) => setPriceConversionRate(event.target.value)}
+              aria-invalid={!isPriceConversionRateValid}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => setPriceConversionDialogOpen(false)}
+            >
+              {t('Cancel')}
+            </Button>
+            <Button
+              onClick={handleConfirmPriceConversion}
+              disabled={!isPriceConversionRateValid}
+            >
+              {t('Apply Sync')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConflictConfirmDialog
         open={conflictDialogOpen}

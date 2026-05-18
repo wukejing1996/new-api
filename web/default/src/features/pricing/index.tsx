@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PublicLayout } from '@/components/layout'
 import { PageTransition } from '@/components/page-transition'
 import {
@@ -33,6 +34,11 @@ import {
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
+import {
+  buildPricingCsv,
+  createPricingCsvFilename,
+  downloadCsv,
+} from './lib/export'
 
 export function Pricing() {
   const { t } = useTranslation()
@@ -107,6 +113,37 @@ export function Pricing() {
     clearFilters()
     clearSearch()
   }, [clearFilters, clearSearch])
+
+  const handleExport = useCallback(() => {
+    if (filteredModels.length === 0) {
+      toast.warning(t('No models to export'))
+      return
+    }
+
+    const csv = buildPricingCsv({
+      models: filteredModels,
+      groupFilter,
+      groupRatio: groupRatio || {},
+      tokenUnit,
+      priceRate: priceRate ?? 1,
+      usdExchangeRate: usdExchangeRate ?? 1,
+      t,
+    })
+    downloadCsv(createPricingCsvFilename(groupFilter), csv)
+    toast.success(
+      t('Price table exported for {{count}} models', {
+        count: filteredModels.length,
+      })
+    )
+  }, [
+    filteredModels,
+    groupFilter,
+    groupRatio,
+    tokenUnit,
+    priceRate,
+    usdExchangeRate,
+    t,
+  ])
 
   const renderPricingContent = () => {
     if (filteredModels.length === 0) {
@@ -253,6 +290,8 @@ export function Pricing() {
                 hasActiveFilters={hasActiveFilters}
                 activeFilterCount={activeFilterCount}
                 onClearFilters={clearFilters}
+                onExport={handleExport}
+                canExport={filteredModels.length > 0}
               />
 
               {renderPricingContent()}

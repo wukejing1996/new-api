@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useCallback, useState } from 'react'
-import { ArrowUpDown, Check, Filter, Grid2X2, Table2 } from 'lucide-react'
+import {
+  ArrowUpDown,
+  Check,
+  Download,
+  Filter,
+  Grid2X2,
+  Table2,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -85,6 +92,8 @@ export interface PricingToolbarProps {
   hasActiveFilters: boolean
   activeFilterCount: number
   onClearFilters: () => void
+  onExport: () => void
+  canExport?: boolean
 }
 
 function SegmentedControl(props: {
@@ -192,6 +201,18 @@ export function PricingToolbar(props: PricingToolbarProps) {
         </div>
 
         <div className='flex flex-wrap items-center gap-2'>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={props.onExport}
+            disabled={props.canExport === false}
+            className='h-8 gap-1.5 px-3 text-xs'
+          >
+            <Download className='size-3.5' />
+            {t('Export price table')}
+          </Button>
+
           <div className='hidden items-center gap-2 sm:flex'>
             <SegmentedControl
               options={[
