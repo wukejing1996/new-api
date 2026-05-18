@@ -35,9 +35,9 @@ import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'
 import {
-  buildPricingCsv,
-  createPricingCsvFilename,
-  downloadCsv,
+  buildPricingSpreadsheet,
+  createPricingSpreadsheetFilename,
+  downloadSpreadsheet,
 } from './lib/export'
 
 export function Pricing() {
@@ -120,7 +120,7 @@ export function Pricing() {
       return
     }
 
-    const csv = buildPricingCsv({
+    const spreadsheet = buildPricingSpreadsheet({
       models: filteredModels,
       groupFilter,
       groupRatio: groupRatio || {},
@@ -129,7 +129,10 @@ export function Pricing() {
       usdExchangeRate: usdExchangeRate ?? 1,
       t,
     })
-    downloadCsv(createPricingCsvFilename(groupFilter), csv)
+    downloadSpreadsheet(
+      createPricingSpreadsheetFilename(groupFilter),
+      spreadsheet
+    )
     toast.success(
       t('Price table exported for {{count}} models', {
         count: filteredModels.length,

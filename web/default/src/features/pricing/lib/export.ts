@@ -38,53 +38,230 @@ type ExportPricingOptions = {
   t: TFunction
 }
 
-type CsvCell = string | number | null | undefined
-type CsvRow = CsvCell[]
+type ExportCell = string | number | null | undefined
+type ExportColumn = {
+  key: string
+  label: string
+  group: 'meta' | 'official' | 'discounted' | 'extra'
+}
+type ExportRow = Record<string, ExportCell>
+type ExportGroup = {
+  name: string
+  ratio: number
+  label: string
+}
 
-const PRICE_TYPES: { labelKey: string; type: PriceType }[] = [
-  { labelKey: 'Input', type: 'input' },
-  { labelKey: 'Output', type: 'output' },
-  { labelKey: 'Cached input', type: 'cache' },
-  { labelKey: 'Cache write', type: 'create_cache' },
-  { labelKey: 'Image input', type: 'image' },
-  { labelKey: 'Audio input', type: 'audio_input' },
-  { labelKey: 'Audio output', type: 'audio_output' },
+const STATIC_PRICE_TYPES: {
+  officialKey: string
+  discountedKey: string
+  type: PriceType
+}[] = [
+  { officialKey: 'official_input', discountedKey: 'discounted_input', type: 'input' },
+  { officialKey: 'official_output', discountedKey: 'discounted_output', type: 'output' },
+  {
+    officialKey: 'official_cache_read',
+    discountedKey: 'discounted_cache_read',
+    type: 'cache',
+  },
+  {
+    officialKey: 'official_cache_write',
+    discountedKey: 'discounted_cache_write',
+    type: 'create_cache',
+  },
+  {
+    officialKey: 'official_image_input',
+    discountedKey: 'discounted_image_input',
+    type: 'image',
+  },
+  {
+    officialKey: 'official_audio_input',
+    discountedKey: 'discounted_audio_input',
+    type: 'audio_input',
+  },
+  {
+    officialKey: 'official_audio_output',
+    discountedKey: 'discounted_audio_output',
+    type: 'audio_output',
+  },
 ]
 
-const DYNAMIC_FIELD_ORDER = [
-  'inputPrice',
-  'outputPrice',
-  'cacheReadPrice',
-  'cacheCreatePrice',
-  'cacheCreate1hPrice',
-  'imagePrice',
-  'imageOutputPrice',
-  'audioInputPrice',
-  'audioOutputPrice',
+const DYNAMIC_PRICE_FIELDS = [
+  {
+    field: 'inputPrice',
+    officialKey: 'official_input',
+    discountedKey: 'discounted_input',
+  },
+  {
+    field: 'outputPrice',
+    officialKey: 'official_output',
+    discountedKey: 'discounted_output',
+  },
+  {
+    field: 'cacheReadPrice',
+    officialKey: 'official_cache_read',
+    discountedKey: 'discounted_cache_read',
+  },
+  {
+    field: 'cacheCreatePrice',
+    officialKey: 'official_cache_write',
+    discountedKey: 'discounted_cache_write',
+  },
+  {
+    field: 'imagePrice',
+    officialKey: 'official_image_input',
+    discountedKey: 'discounted_image_input',
+  },
+  {
+    field: 'audioInputPrice',
+    officialKey: 'official_audio_input',
+    discountedKey: 'discounted_audio_input',
+  },
+  {
+    field: 'audioOutputPrice',
+    officialKey: 'official_audio_output',
+    discountedKey: 'discounted_audio_output',
+  },
 ]
 
-function getDynamicFieldLabels(t: TFunction): Record<string, string> {
+function buildColumns(t: TFunction): ExportColumn[] {
+  return [
+    { key: 'model', label: t('Model'), group: 'meta' },
+    { key: 'vendor', label: t('Vendor'), group: 'meta' },
+    { key: 'billing_mode', label: t('Billing mode'), group: 'meta' },
+    { key: 'group', label: t('Group'), group: 'meta' },
+    { key: 'group_ratio', label: t('Group Ratio'), group: 'meta' },
+    { key: 'tier', label: t('Tier'), group: 'meta' },
+    { key: 'unit', label: t('Unit'), group: 'meta' },
+    {
+      key: 'official_input',
+      label: t('Official input price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_input',
+      label: t('Discounted input price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_output',
+      label: t('Official output price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_output',
+      label: t('Discounted output price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_cache_read',
+      label: t('Official cache read price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_cache_read',
+      label: t('Discounted cache read price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_cache_write',
+      label: t('Official cache write price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_cache_write',
+      label: t('Discounted cache write price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_image_input',
+      label: t('Official image input price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_image_input',
+      label: t('Discounted image input price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_audio_input',
+      label: t('Official audio input price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_audio_input',
+      label: t('Discounted audio input price'),
+      group: 'discounted',
+    },
+    {
+      key: 'official_audio_output',
+      label: t('Official audio output price'),
+      group: 'official',
+    },
+    {
+      key: 'discounted_audio_output',
+      label: t('Discounted audio output price'),
+      group: 'discounted',
+    },
+    {
+      key: 'request_official',
+      label: t('Official request price'),
+      group: 'official',
+    },
+    {
+      key: 'request_discounted',
+      label: t('Discounted request price'),
+      group: 'discounted',
+    },
+    { key: 'endpoints', label: t('Endpoints'), group: 'extra' },
+    { key: 'tags', label: t('Tags'), group: 'extra' },
+    { key: 'enabled_groups', label: t('Enabled groups'), group: 'extra' },
+    { key: 'raw_expression', label: t('Raw expression'), group: 'extra' },
+  ]
+}
+
+function getMinAvailableGroup(
+  model: PricingModel,
+  groupRatio: Record<string, number>,
+  t: TFunction
+): ExportGroup {
+  const groups = Array.isArray(model.enable_groups) ? model.enable_groups : []
+  if (groups.length === 0) {
+    return { name: '', ratio: 1, label: t('All Groups') }
+  }
+
+  let selected = groups[0]
+  let selectedRatio = groupRatio[selected] || 1
+  for (const group of groups.slice(1)) {
+    const ratio = groupRatio[group] || 1
+    if (ratio < selectedRatio) {
+      selected = group
+      selectedRatio = ratio
+    }
+  }
+
   return {
-    inputPrice: t('Input'),
-    outputPrice: t('Output'),
-    cacheReadPrice: t('Cache Read'),
-    cacheCreatePrice: t('Cache Write'),
-    cacheCreate1hPrice: t('Cache Write (1h)'),
-    imagePrice: t('Image input'),
-    imageOutputPrice: t('Image output price'),
-    audioInputPrice: t('Audio input'),
-    audioOutputPrice: t('Audio output'),
+    name: selected,
+    ratio: selectedRatio,
+    label: `${t('All Groups')} (${selected})`,
   }
 }
 
-function getExportGroups(model: PricingModel, selectedGroup: string): string[] {
+function getExportGroup(
+  model: PricingModel,
+  selectedGroup: string,
+  options: ExportPricingOptions
+): ExportGroup | null {
   const groups = Array.isArray(model.enable_groups) ? model.enable_groups : []
-
   if (selectedGroup !== FILTER_ALL) {
-    return groups.includes(selectedGroup) ? [selectedGroup] : []
+    if (!groups.includes(selectedGroup)) return null
+    return {
+      name: selectedGroup,
+      ratio: getGroupRatio(selectedGroup, options.groupRatio),
+      label: selectedGroup,
+    }
   }
 
-  return groups.length > 0 ? groups : ['']
+  return getMinAvailableGroup(model, options.groupRatio, options.t)
 }
 
 function getGroupRatio(group: string, groupRatio: Record<string, number>) {
@@ -98,16 +275,39 @@ function getBillingMode(model: PricingModel, t: TFunction): string {
   return t('Token-based')
 }
 
+function getBaseRow(
+  model: PricingModel,
+  group: ExportGroup,
+  options: ExportPricingOptions,
+  tier?: string
+): ExportRow {
+  return {
+    model: model.model_name,
+    vendor: model.vendor_name || '',
+    billing_mode: getBillingMode(model, options.t),
+    group: group.label,
+    group_ratio: group.ratio,
+    tier: tier || options.t('Default'),
+    unit: isTokenBasedModel(model)
+      ? `1${options.tokenUnit} ${options.t('tokens')}`
+      : options.t('request'),
+    endpoints: model.supported_endpoint_types?.join(', ') || '',
+    tags: parseTags(model.tags).join(', '),
+    enabled_groups: model.enable_groups?.join(', ') || '',
+    raw_expression: '',
+  }
+}
+
 function formatTokenPrice(
   model: PricingModel,
-  group: string,
+  group: ExportGroup,
   type: PriceType,
   options: ExportPricingOptions,
   showRechargePrice: boolean
 ): string {
   const value = formatGroupPrice(
     model,
-    group,
+    group.name,
     type,
     options.tokenUnit,
     showRechargePrice,
@@ -119,186 +319,181 @@ function formatTokenPrice(
   return value === '-' ? '' : value
 }
 
-function buildStaticRows(
+function buildStaticRow(
   model: PricingModel,
-  group: string,
+  group: ExportGroup,
   options: ExportPricingOptions
-): CsvRow[] {
-  const isTokenBased = isTokenBasedModel(model)
+): ExportRow {
+  const row = getBaseRow(model, group, options)
 
-  if (!isTokenBased) {
-    return [
-      [
-        model.model_name,
-        model.vendor_name || '',
-        getBillingMode(model, options.t),
-        group,
-        getGroupRatio(group, options.groupRatio),
-        options.t('Default'),
-        options.t('Request price'),
-        formatFixedPrice(
-          model,
-          group,
-          false,
-          options.priceRate,
-          options.usdExchangeRate,
-          options.groupRatio
-        ),
-        formatFixedPrice(
-          model,
-          group,
-          true,
-          options.priceRate,
-          options.usdExchangeRate,
-          options.groupRatio
-        ),
-        options.t('request'),
-        model.supported_endpoint_types?.join(', ') || '',
-        parseTags(model.tags).join(', '),
-        model.enable_groups?.join(', ') || '',
-        '',
-      ],
-    ]
+  if (!isTokenBasedModel(model)) {
+    row.request_official = formatFixedPrice(
+      model,
+      group.name,
+      false,
+      options.priceRate,
+      options.usdExchangeRate,
+      options.groupRatio
+    )
+    row.request_discounted = formatFixedPrice(
+      model,
+      group.name,
+      true,
+      options.priceRate,
+      options.usdExchangeRate,
+      options.groupRatio
+    )
+    return row
   }
 
-  return PRICE_TYPES.map(({ labelKey, type }) => {
-    const officialPrice = formatTokenPrice(model, group, type, options, false)
-    const discountedPrice = formatTokenPrice(model, group, type, options, true)
-    if (!officialPrice && !discountedPrice) return null
-
-    return [
-      model.model_name,
-      model.vendor_name || '',
-      getBillingMode(model, options.t),
+  for (const priceType of STATIC_PRICE_TYPES) {
+    row[priceType.officialKey] = formatTokenPrice(
+      model,
       group,
-      getGroupRatio(group, options.groupRatio),
-      options.t('Default'),
-      options.t(labelKey),
-      officialPrice,
-      discountedPrice,
-      `1${options.tokenUnit} ${options.t('tokens')}`,
-      model.supported_endpoint_types?.join(', ') || '',
-      parseTags(model.tags).join(', '),
-      model.enable_groups?.join(', ') || '',
-      '',
-    ]
-  }).filter((row): row is CsvRow => Boolean(row))
+      priceType.type,
+      options,
+      false
+    )
+    row[priceType.discountedKey] = formatTokenPrice(
+      model,
+      group,
+      priceType.type,
+      options,
+      true
+    )
+  }
+
+  return row
 }
 
 function buildDynamicRows(
   model: PricingModel,
-  group: string,
+  group: ExportGroup,
   options: ExportPricingOptions
-): CsvRow[] {
+): ExportRow[] {
   const tiers = getDynamicPricingTiers(model)
 
   if (tiers.length === 0) {
     return [
-      [
-        model.model_name,
-        model.vendor_name || '',
-        options.t('Special billing expression'),
-        group,
-        getGroupRatio(group, options.groupRatio),
-        options.t('Default'),
-        options.t('Raw expression'),
-        '',
-        '',
-        '',
-        model.supported_endpoint_types?.join(', ') || '',
-        parseTags(model.tags).join(', '),
-        model.enable_groups?.join(', ') || '',
-        model.billing_expr || '',
-      ],
+      {
+        ...getBaseRow(model, group, options),
+        billing_mode: options.t('Special billing expression'),
+        unit: '',
+        raw_expression: model.billing_expr || '',
+      },
     ]
   }
 
-  const fieldLabels = getDynamicFieldLabels(options.t)
-  return tiers.flatMap((tier, tierIndex) => {
-    const entries = getDynamicPriceEntries(tier, {
+  return tiers.map((tier, tierIndex) => {
+    const row = getBaseRow(
+      model,
+      group,
+      options,
+      tier.label || `${options.t('Tier')} ${tierIndex + 1}`
+    )
+    const officialEntries = getDynamicPriceEntries(tier, {
       tokenUnit: options.tokenUnit,
       showRechargePrice: false,
       priceRate: options.priceRate,
       usdExchangeRate: options.usdExchangeRate,
-      groupRatioMultiplier: getGroupRatio(group, options.groupRatio),
+      groupRatioMultiplier: group.ratio,
     })
     const discountedEntries = getDynamicPriceEntries(tier, {
       tokenUnit: options.tokenUnit,
       showRechargePrice: true,
       priceRate: options.priceRate,
       usdExchangeRate: options.usdExchangeRate,
-      groupRatioMultiplier: getGroupRatio(group, options.groupRatio),
+      groupRatioMultiplier: group.ratio,
     })
 
-    return DYNAMIC_FIELD_ORDER.map((field) => {
-      const entry = entries.find((item) => item.field === field)
-      if (!entry) return null
-      const discountedEntry = discountedEntries.find(
-        (item) => item.field === field
-      )
+    for (const priceField of DYNAMIC_PRICE_FIELDS) {
+      row[priceField.officialKey] =
+        officialEntries.find((entry) => entry.field === priceField.field)
+          ?.formatted || ''
+      row[priceField.discountedKey] =
+        discountedEntries.find((entry) => entry.field === priceField.field)
+          ?.formatted || ''
+    }
 
-      return [
-        model.model_name,
-        model.vendor_name || '',
-        getBillingMode(model, options.t),
-        group,
-        getGroupRatio(group, options.groupRatio),
-        tier.label || `${options.t('Tier')} ${tierIndex + 1}`,
-        fieldLabels[field] || field,
-        entry.formatted,
-        discountedEntry?.formatted || '',
-        `1${options.tokenUnit} ${options.t('tokens')}`,
-        model.supported_endpoint_types?.join(', ') || '',
-        parseTags(model.tags).join(', '),
-        model.enable_groups?.join(', ') || '',
-        model.billing_expr || '',
-      ]
-    }).filter((row): row is CsvRow => Boolean(row))
+    row.raw_expression = model.billing_expr || ''
+    return row
   })
 }
 
-function csvEscape(value: CsvCell): string {
-  const text = value == null ? '' : String(value)
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`
-  }
-  return text
-}
-
-export function buildPricingCsv(options: ExportPricingOptions): string {
-  const header = [
-    options.t('Model'),
-    options.t('Vendor'),
-    options.t('Billing mode'),
-    options.t('Group'),
-    options.t('Group Ratio'),
-    options.t('Tier'),
-    options.t('Price type'),
-    options.t('Official price'),
-    options.t('Discounted price'),
-    options.t('Unit'),
-    options.t('Endpoints'),
-    options.t('Tags'),
-    options.t('Enabled groups'),
-    options.t('Raw expression'),
-  ]
-
-  const rows = options.models.flatMap((model) =>
-    getExportGroups(model, options.groupFilter).flatMap((group) =>
-      isDynamicPricingModel(model)
+function buildRows(options: ExportPricingOptions): ExportRow[] {
+  return options.models.flatMap((model) =>
+    (() => {
+      const group = getExportGroup(model, options.groupFilter, options)
+      if (!group) return []
+      return isDynamicPricingModel(model)
         ? buildDynamicRows(model, group, options)
-        : buildStaticRows(model, group, options)
-    )
+        : [buildStaticRow(model, group, options)]
+    })()
   )
-
-  return [header, ...rows]
-    .map((row) => row.map(csvEscape).join(','))
-    .join('\r\n')
 }
 
-export function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([`\uFEFF${csv}`], {
-    type: 'text/csv;charset=utf-8',
+function escapeHtml(value: ExportCell): string {
+  const text = value == null ? '' : String(value)
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function getHeaderStyle(group: ExportColumn['group']): string {
+  switch (group) {
+    case 'official':
+      return 'background:#dbeafe;color:#1e3a8a;'
+    case 'discounted':
+      return 'background:#dcfce7;color:#14532d;'
+    case 'extra':
+      return 'background:#fef3c7;color:#78350f;'
+    case 'meta':
+    default:
+      return 'background:#e5e7eb;color:#111827;'
+  }
+}
+
+export function buildPricingSpreadsheet(options: ExportPricingOptions): string {
+  const columns = buildColumns(options.t)
+  const rows = buildRows(options)
+  const headerCells = columns
+    .map(
+      (column) =>
+        `<th style="${getHeaderStyle(column.group)}border:1px solid #9ca3af;padding:6px;font-weight:700;">${escapeHtml(column.label)}</th>`
+    )
+    .join('')
+  const bodyRows = rows
+    .map((row) => {
+      const cells = columns
+        .map(
+          (column) =>
+            `<td style="border:1px solid #d1d5db;padding:5px;mso-number-format:'\\@';">${escapeHtml(row[column.key])}</td>`
+        )
+        .join('')
+      return `<tr>${cells}</tr>`
+    })
+    .join('')
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+</head>
+<body>
+  <table>
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table>
+</body>
+</html>`
+}
+
+export function downloadSpreadsheet(filename: string, content: string) {
+  const blob = new Blob([`\uFEFF${content}`], {
+    type: 'application/vnd.ms-excel;charset=utf-8',
   })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -310,9 +505,9 @@ export function downloadCsv(filename: string, csv: string) {
   URL.revokeObjectURL(url)
 }
 
-export function createPricingCsvFilename(groupFilter: string): string {
+export function createPricingSpreadsheetFilename(groupFilter: string): string {
   const date = new Date().toISOString().slice(0, 10)
   const group = groupFilter === FILTER_ALL ? 'all-groups' : groupFilter
   const safeGroup = group.replace(/[^\w.-]+/g, '-')
-  return `model-prices-${safeGroup}-${date}.csv`
+  return `model-prices-${safeGroup}-${date}.xls`
 }
