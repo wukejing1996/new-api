@@ -85,6 +85,11 @@ var numericPricingSyncFields = map[string]bool{
 	"model_price":            true,
 }
 
+var absolutePriceConversionFields = map[string]bool{
+	"model_ratio": true,
+	"model_price": true,
+}
+
 type upstreamResult struct {
 	Name string         `json:"name"`
 	Data map[string]any `json:"data,omitempty"`
@@ -131,6 +136,43 @@ func normalizeSyncValue(field string, value any) any {
 	return value
 }
 
+func normalizePriceConversionRate(rate float64) float64 {
+	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate <= 0 {
+		return 1
+	}
+	return rate
+}
+
+func roundPriceConversionValue(value float64) float64 {
+	return math.Round(value*1e12) / 1e12
+}
+
+func applyUpstreamPriceConversion(data map[string]any, rate float64) map[string]any {
+	rate = normalizePriceConversionRate(rate)
+	if nearlyEqual(rate, 1) {
+		return data
+	}
+
+	for field := range absolutePriceConversionFields {
+		values := valueMap(data[field])
+		if len(values) == 0 {
+			continue
+		}
+
+		converted := make(map[string]any, len(values))
+		for modelName, rawValue := range values {
+			if value, ok := asFloat64(rawValue); ok {
+				converted[modelName] = roundPriceConversionValue(value / rate)
+			} else {
+				converted[modelName] = rawValue
+			}
+		}
+		data[field] = converted
+	}
+
+	return data
+}
+
 func getLocalPricingSyncData() map[string]any {
 	data := billing_setting.GetPricingSyncData(map[string]any(ratio_setting.GetExposedData()))
 	data["image_ratio"] = ratio_setting.GetImageRatioCopy()
@@ -150,6 +192,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 	if req.Timeout <= 0 {
 		req.Timeout = defaultTimeoutSeconds
 	}
+	priceConversionRate := normalizePriceConversionRate(req.PriceConversionRate)
 
 	var upstreams []dto.UpstreamDTO
 
@@ -511,6 +554,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 				Error:  r.Err,
 			})
 		} else {
+			r.Data = applyUpstreamPriceConversion(r.Data, priceConversionRate)
 			testResults = append(testResults, dto.TestResult{
 				Name:   r.Name,
 				Status: "success",

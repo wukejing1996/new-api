@@ -362,6 +362,7 @@ export type UpstreamConfig = {
 export type FetchUpstreamRatiosRequest = {
   upstreams: UpstreamConfig[]
   timeout: number
+  price_conversion_rate?: number
 }
 
 export type TestResult = {

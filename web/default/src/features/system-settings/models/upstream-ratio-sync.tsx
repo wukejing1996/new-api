@@ -148,6 +148,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   const [channelEndpoints, setChannelEndpoints] = useState<
     Record<number, string>
   >({})
+  const [priceConversionRate, setPriceConversionRate] = useState('1')
   const [differences, setDifferences] = useState<DifferencesMap>({})
   const [resolutions, setResolutions] = useState<ResolutionsMap>({})
   const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
@@ -248,6 +249,12 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   }
 
   const handleConfirmChannelSelection = (selectedIds: number[]) => {
+    const conversionRate = Number(priceConversionRate)
+    if (!Number.isFinite(conversionRate) || conversionRate <= 0) {
+      toast.warning(t('Price conversion rate must be greater than 0'))
+      return
+    }
+
     const selectedChannels = channels.filter((ch) =>
       selectedIds.includes(ch.id)
     )
@@ -264,7 +271,11 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       endpoint: channelEndpoints[ch.id] || DEFAULT_ENDPOINT,
     }))
 
-    fetchMutation.mutate({ upstreams, timeout: 10 })
+    fetchMutation.mutate({
+      upstreams,
+      timeout: 10,
+      price_conversion_rate: conversionRate,
+    })
   }
 
   const handleSelectValue = useCallback(
@@ -555,6 +566,8 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         onSelectedChannelIdsChange={setSelectedChannelIds}
         channelEndpoints={channelEndpoints}
         onChannelEndpointsChange={setChannelEndpoints}
+        priceConversionRate={priceConversionRate}
+        onPriceConversionRateChange={setPriceConversionRate}
         onConfirm={handleConfirmChannelSelection}
       />
 
