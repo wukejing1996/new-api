@@ -51,6 +51,9 @@ type ExportGroup = {
   label: string
 }
 
+const OFFICIAL_GROUP = '_official_base'
+const OFFICIAL_GROUP_RATIO = { [OFFICIAL_GROUP]: 1 }
+
 const STATIC_PRICE_TYPES: {
   officialKey: string
   discountedKey: string
@@ -303,17 +306,18 @@ function formatTokenPrice(
   group: ExportGroup,
   type: PriceType,
   options: ExportPricingOptions,
-  showRechargePrice: boolean
+  showRechargePrice: boolean,
+  useOfficialBasePrice = false
 ): string {
   const value = formatGroupPrice(
     model,
-    group.name,
+    useOfficialBasePrice ? OFFICIAL_GROUP : group.name,
     type,
     options.tokenUnit,
     showRechargePrice,
     options.priceRate,
     options.usdExchangeRate,
-    options.groupRatio
+    useOfficialBasePrice ? OFFICIAL_GROUP_RATIO : options.groupRatio
   )
 
   return value === '-' ? '' : value
@@ -329,11 +333,11 @@ function buildStaticRow(
   if (!isTokenBasedModel(model)) {
     row.request_official = formatFixedPrice(
       model,
-      group.name,
+      OFFICIAL_GROUP,
       false,
       options.priceRate,
       options.usdExchangeRate,
-      options.groupRatio
+      OFFICIAL_GROUP_RATIO
     )
     row.request_discounted = formatFixedPrice(
       model,
@@ -352,7 +356,8 @@ function buildStaticRow(
       group,
       priceType.type,
       options,
-      false
+      false,
+      true
     )
     row[priceType.discountedKey] = formatTokenPrice(
       model,
@@ -396,7 +401,7 @@ function buildDynamicRows(
       showRechargePrice: false,
       priceRate: options.priceRate,
       usdExchangeRate: options.usdExchangeRate,
-      groupRatioMultiplier: group.ratio,
+      groupRatioMultiplier: 1,
     })
     const discountedEntries = getDynamicPriceEntries(tier, {
       tokenUnit: options.tokenUnit,
