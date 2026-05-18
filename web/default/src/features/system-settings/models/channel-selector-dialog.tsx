@@ -39,7 +39,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -75,8 +74,6 @@ type ChannelSelectorDialogProps = {
   onSelectedChannelIdsChange: (ids: number[]) => void
   channelEndpoints: Record<number, string>
   onChannelEndpointsChange: (endpoints: Record<number, string>) => void
-  priceConversionRate: string
-  onPriceConversionRateChange: (rate: string) => void
   onConfirm: (selectedIds: number[]) => void
 }
 
@@ -96,8 +93,6 @@ export function ChannelSelectorDialog({
   onSelectedChannelIdsChange,
   channelEndpoints,
   onChannelEndpointsChange,
-  priceConversionRate,
-  onPriceConversionRateChange,
   onConfirm,
 }: ChannelSelectorDialogProps) {
   const { t } = useTranslation()
@@ -326,11 +321,6 @@ export function ChannelSelectorDialog({
     },
   })
 
-  const parsedPriceConversionRate = Number(priceConversionRate)
-  const isPriceConversionRateValid =
-    Number.isFinite(parsedPriceConversionRate) &&
-    parsedPriceConversionRate > 0
-
   const handleConfirm = () => {
     const selectedRows = table.getSelectedRowModel().rows
     const selectedIds = selectedRows.map((row) => row.original.id)
@@ -350,7 +340,7 @@ export function ChannelSelectorDialog({
         </DialogHeader>
 
         <div className='flex flex-1 flex-col gap-4 overflow-hidden'>
-          <div className='flex flex-col gap-3 sm:flex-row sm:items-start'>
+          <div className='flex items-center gap-2'>
             <div className='relative flex-1'>
               <Search className='text-muted-foreground absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2' />
               <Input
@@ -359,25 +349,6 @@ export function ChannelSelectorDialog({
                 onChange={(e) => setSearch(e.target.value)}
                 className='ps-8'
               />
-            </div>
-            <div className='grid w-full gap-1.5 sm:w-72'>
-              <Label htmlFor='price-conversion-rate'>
-                {t('Price conversion rate')}
-              </Label>
-              <Input
-                id='price-conversion-rate'
-                type='number'
-                min='0.000001'
-                step='0.000001'
-                value={priceConversionRate}
-                onChange={(e) => onPriceConversionRateChange(e.target.value)}
-                aria-invalid={!isPriceConversionRateValid}
-              />
-              <p className='text-muted-foreground text-xs'>
-                {t(
-                  'Divide absolute upstream prices by this rate before comparing. Example: if upstream prices are CNY and 1 USD = 7.3 CNY, enter 7.3 to convert them to USD.'
-                )}
-              </p>
             </div>
           </div>
 
@@ -437,12 +408,7 @@ export function ChannelSelectorDialog({
           <Button variant='outline' onClick={() => onOpenChange(false)}>
             {t('Cancel')}
           </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={!isPriceConversionRateValid}
-          >
-            {t('Confirm Selection')}
-          </Button>
+          <Button onClick={handleConfirm}>{t('Confirm Selection')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -22,6 +22,8 @@ import { CheckSquare, RefreshCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   fetchUpstreamRatios,
   getUpstreamChannels,
@@ -249,12 +251,6 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   }
 
   const handleConfirmChannelSelection = (selectedIds: number[]) => {
-    const conversionRate = Number(priceConversionRate)
-    if (!Number.isFinite(conversionRate) || conversionRate <= 0) {
-      toast.warning(t('Price conversion rate must be greater than 0'))
-      return
-    }
-
     const selectedChannels = channels.filter((ch) =>
       selectedIds.includes(ch.id)
     )
@@ -274,7 +270,6 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     fetchMutation.mutate({
       upstreams,
       timeout: 10,
-      price_conversion_rate: conversionRate,
     })
   }
 
@@ -384,6 +379,19 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
     return null
   }
 
+  const getConvertedSyncValue = useCallback(
+    (ratioType: string, value: number | string): number | string => {
+      if (ratioType !== 'model_ratio' && ratioType !== 'model_price') {
+        return value
+      }
+      const numericValue = Number(value)
+      const conversionRate = Number(priceConversionRate)
+      if (!Number.isFinite(numericValue)) return value
+      return Number((numericValue / conversionRate).toFixed(12))
+    },
+    [priceConversionRate]
+  )
+
   const performSync = useCallback(
     async (currentRatios: ParsedRatios): Promise<boolean> => {
       const finalRatios: Record<string, Record<string, number | string>> = {
@@ -425,9 +433,10 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
         Object.entries(ratios).forEach(([ratioType, value]) => {
           const optionKey = optionKeyBySyncField(ratioType)
+          const convertedValue = getConvertedSyncValue(ratioType, value)
           finalRatios[optionKey][model] = NUMERIC_SYNC_FIELDS.has(ratioType)
-            ? Number(value)
-            : value
+            ? Number(convertedValue)
+            : convertedValue
         })
       })
 
@@ -443,7 +452,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         })
       })
     },
-    [resolutions, syncMutate]
+    [getConvertedSyncValue, resolutions, syncMutate]
   )
 
   const findSourceChannel = (
@@ -458,6 +467,11 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
   }
 
   const handleApplySync = () => {
+    if (!isPriceConversionRateValid) {
+      toast.warning(t('Price conversion rate must be greater than 0'))
+      return
+    }
+
     const currentRatios = parsedRatios
     const conflicts: ConflictItem[] = []
 
@@ -485,8 +499,8 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
         const newDesc =
           newCat === 'price'
-            ? `${fixedPriceLabel}: ${ratios.model_price}`
-            : `${modelRatioLabel}: ${ratios.model_ratio ?? '-'}\n${completionRatioLabel}: ${ratios.completion_ratio ?? '-'}`
+            ? `${fixedPriceLabel}: ${getConvertedSyncValue('model_price', ratios.model_price)}`
+            : `${modelRatioLabel}: ${ratios.model_ratio === undefined ? '-' : getConvertedSyncValue('model_ratio', ratios.model_ratio)}\n${completionRatioLabel}: ${ratios.completion_ratio ?? '-'}`
 
         const channelNames = selectedTypes
           .map((rt) => findSourceChannel(model, rt as RatioType, ratios[rt]))
@@ -526,10 +540,34 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
 
   const hasSelections = Object.keys(resolutions).length > 0
   const isLoading = fetchMutation.isPending || isSyncPending || confirmLoading
+  const parsedPriceConversionRate = Number(priceConversionRate)
+  const isPriceConversionRateValid =
+    Number.isFinite(parsedPriceConversionRate) && parsedPriceConversionRate > 0
 
   return (
     <div className='space-y-4'>
-      <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between'>
+        <div className='grid gap-1.5 lg:max-w-xl'>
+          <Label htmlFor='upstream-price-conversion-rate'>
+            {t('Price conversion rate')}
+          </Label>
+          <Input
+            id='upstream-price-conversion-rate'
+            type='number'
+            min='0.000001'
+            step='0.000001'
+            value={priceConversionRate}
+            onChange={(event) => setPriceConversionRate(event.target.value)}
+            disabled={isLoading}
+            aria-invalid={!isPriceConversionRateValid}
+            className='max-w-xs'
+          />
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'When applying sync, divide selected absolute prices by this rate before saving. Example: if upstream prices are CNY and 1 USD = 7.3 CNY, enter 7.3 to save USD prices.'
+            )}
+          </p>
+        </div>
         <div className='flex flex-col gap-2 sm:flex-row'>
           <Button onClick={handleOpenChannelDialog} disabled={isLoading}>
             <RefreshCcw className='mr-2 h-4 w-4' />
@@ -538,7 +576,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
           <Button
             variant='secondary'
             onClick={handleApplySync}
-            disabled={!hasSelections || isLoading}
+            disabled={!hasSelections || isLoading || !isPriceConversionRateValid}
           >
             {(isSyncPending || confirmLoading) && (
               <span className='mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent' />
@@ -566,8 +604,6 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         onSelectedChannelIdsChange={setSelectedChannelIds}
         channelEndpoints={channelEndpoints}
         onChannelEndpointsChange={setChannelEndpoints}
-        priceConversionRate={priceConversionRate}
-        onPriceConversionRateChange={setPriceConversionRate}
         onConfirm={handleConfirmChannelSelection}
       />
 
