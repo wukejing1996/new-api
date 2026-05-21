@@ -7,7 +7,7 @@ set -eu
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 SERVICE_NAME="${SERVICE_NAME:-new-api}"
-BRANCH="${BRANCH:-main}"
+BRANCH="${BRANCH:-wukejing}"
 RESTART_DEPS="${RESTART_DEPS:-0}"
 BUILD_IMAGE="${BUILD_IMAGE:-1}"
 
