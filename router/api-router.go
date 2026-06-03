@@ -40,6 +40,22 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/rankings", middleware.HeaderNavModuleAuth("rankings"), controller.GetRankings)
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
+		blogRoute := apiRouter.Group("/blog")
+		{
+			blogRoute.GET("/posts", controller.GetPublishedBlogPosts)
+			blogRoute.GET("/posts/:slug", controller.GetPublishedBlogPost)
+			blogAdminRoute := blogRoute.Group("/admin")
+			blogAdminRoute.Use(middleware.AdminAuth())
+			{
+				blogAdminRoute.GET("/posts", controller.AdminListBlogPosts)
+				blogAdminRoute.GET("/posts/:id", controller.AdminGetBlogPost)
+				blogAdminRoute.POST("/posts", controller.AdminCreateBlogPost)
+				blogAdminRoute.PUT("/posts/:id", controller.AdminUpdateBlogPost)
+				blogAdminRoute.DELETE("/posts/:id", controller.AdminDeleteBlogPost)
+				blogAdminRoute.POST("/posts/:id/publish", controller.AdminPublishBlogPost)
+				blogAdminRoute.POST("/posts/:id/unpublish", controller.AdminUnpublishBlogPost)
+			}
+		}
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
 		// OAuth routes - specific routes must come before :provider wildcard
 		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), controller.GenerateOAuthCode)
