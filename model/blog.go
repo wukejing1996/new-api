@@ -34,7 +34,7 @@ type BlogPost struct {
 	Excerpt     string `json:"excerpt" gorm:"type:text"`
 	ContentHTML string `json:"content_html" gorm:"type:text"`
 	ContentJSON string `json:"content_json" gorm:"type:text"`
-	CoverImage  string `json:"cover_image" gorm:"type:varchar(512)"`
+	CoverImage  string `json:"cover_image" gorm:"type:text"`
 
 	Status      string `json:"status" gorm:"type:varchar(32);not null;default:'draft';index"`
 	PublishedAt int64  `json:"published_at" gorm:"bigint;index"`
@@ -43,7 +43,7 @@ type BlogPost struct {
 	SEOTitle       string `json:"seo_title" gorm:"type:varchar(255)"`
 	SEODescription string `json:"seo_description" gorm:"type:varchar(320)"`
 	CanonicalURL   string `json:"canonical_url" gorm:"type:varchar(512)"`
-	OGImage        string `json:"og_image" gorm:"type:varchar(512)"`
+	OGImage        string `json:"og_image" gorm:"type:text"`
 	Keywords       string `json:"keywords" gorm:"type:varchar(512)"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`

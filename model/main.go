@@ -286,6 +286,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateBlogImageFieldsToText(); err != nil {
+		return err
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -355,6 +358,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := migrateBlogImageFieldsToText(); err != nil {
+		return err
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -450,6 +456,59 @@ PRIMARY KEY (` + "`id`" + `)
 			return err
 		}
 	}
+	return nil
+}
+
+// migrateBlogImageFieldsToText migrates image payload columns away from varchar(512).
+// Base64 image data easily exceeds varchar limits; MySQL uses longtext because text
+// can still be too small for typical image uploads.
+func migrateBlogImageFieldsToText() error {
+	if common.UsingSQLite {
+		return nil
+	}
+
+	tableName := "blog_posts"
+	if !DB.Migrator().HasTable(tableName) {
+		return nil
+	}
+
+	for _, columnName := range []string{"cover_image", "og_image"} {
+		if !DB.Migrator().HasColumn(&BlogPost{}, columnName) {
+			continue
+		}
+
+		var alterSQL string
+		if common.UsingPostgreSQL {
+			var dataType string
+			if err := DB.Raw(`SELECT data_type FROM information_schema.columns
+				WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
+				tableName, columnName).Scan(&dataType).Error; err != nil {
+				common.SysLog(fmt.Sprintf("Warning: failed to query metadata for %s.%s: %v", tableName, columnName, err))
+			} else if dataType == "text" {
+				continue
+			}
+			alterSQL = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s TYPE text`, tableName, columnName)
+		} else if common.UsingMySQL {
+			var columnType string
+			if err := DB.Raw(`SELECT COLUMN_TYPE FROM information_schema.columns
+				WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+				tableName, columnName).Scan(&columnType).Error; err != nil {
+				common.SysLog(fmt.Sprintf("Warning: failed to query metadata for %s.%s: %v", tableName, columnName, err))
+			} else if strings.ToLower(columnType) == "longtext" {
+				continue
+			}
+			alterSQL = fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s longtext", tableName, columnName)
+		}
+
+		if alterSQL == "" {
+			continue
+		}
+		if err := DB.Exec(alterSQL).Error; err != nil {
+			return fmt.Errorf("failed to migrate %s.%s to text: %w", tableName, columnName, err)
+		}
+		common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to text", tableName, columnName))
+	}
+
 	return nil
 }
 
