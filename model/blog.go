@@ -177,6 +177,16 @@ func GetPublishedBlogPosts(locale string, offset int, limit int) ([]BlogPostList
 	return posts, total, err
 }
 
+func GetAllPublishedBlogPostsForSitemap() ([]BlogPostListItem, error) {
+	var posts []BlogPostListItem
+	err := DB.Model(&BlogPost{}).
+		Where("status = ?", BlogPostStatusPublished).
+		Select([]string{"id", "locale", "slug", "updated_at"}).
+		Order("locale asc, published_at desc, id desc").
+		Find(&posts).Error
+	return posts, err
+}
+
 func GetPublishedBlogPost(locale string, slug string) (*BlogPost, error) {
 	var post BlogPost
 	query := DB.Where("status = ? AND slug = ?", BlogPostStatusPublished, strings.TrimSpace(slug))
