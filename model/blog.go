@@ -39,6 +39,7 @@ type BlogPost struct {
 	Status      string `json:"status" gorm:"type:varchar(32);not null;default:'draft';index"`
 	PublishedAt int64  `json:"published_at" gorm:"bigint;index"`
 	AuthorId    int    `json:"author_id" gorm:"index"`
+	ViewCount   int64  `json:"view_count" gorm:"bigint;not null;default:0;index"`
 
 	SEOTitle       string `json:"seo_title" gorm:"type:varchar(255)"`
 	SEODescription string `json:"seo_description" gorm:"type:varchar(320)"`
@@ -62,6 +63,7 @@ type BlogPostListItem struct {
 	Status      string `json:"status"`
 	PublishedAt int64  `json:"published_at"`
 	AuthorId    int    `json:"author_id"`
+	ViewCount   int64  `json:"view_count"`
 
 	SEOTitle       string `json:"seo_title"`
 	SEODescription string `json:"seo_description"`
@@ -80,6 +82,14 @@ type AdminBlogPostQuery struct {
 	Offset  int
 	Limit   int
 }
+
+type BlogPostSort string
+
+const (
+	BlogPostSortPublishedDesc BlogPostSort = "published_desc"
+	BlogPostSortPublishedAsc  BlogPostSort = "published_asc"
+	BlogPostSortViewsDesc     BlogPostSort = "views_desc"
+)
 
 func (p *BlogPost) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
@@ -155,7 +165,7 @@ func sanitizeBlogHTML(value string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-func GetPublishedBlogPosts(locale string, offset int, limit int) ([]BlogPostListItem, int64, error) {
+func GetPublishedBlogPosts(locale string, offset int, limit int, sort string) ([]BlogPostListItem, int64, error) {
 	var posts []BlogPostListItem
 	query := DB.Model(&BlogPost{}).Where("status = ?", BlogPostStatusPublished)
 	locale = strings.TrimSpace(locale)
@@ -172,7 +182,7 @@ func GetPublishedBlogPosts(locale string, offset int, limit int) ([]BlogPostList
 	err := query.Select(blogPostListSelect()).
 		Offset(offset).
 		Limit(limit).
-		Order("published_at desc, id desc").
+		Order(blogPostOrderBy(sort)).
 		Find(&posts).Error
 	return posts, total, err
 }
@@ -198,6 +208,37 @@ func GetPublishedBlogPost(locale string, slug string) (*BlogPost, error) {
 		return nil, err
 	}
 	return &post, nil
+}
+
+func IncrementPublishedBlogPostView(locale string, slug string) (int64, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return 0, gorm.ErrRecordNotFound
+	}
+
+	query := DB.Model(&BlogPost{}).Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
+	locale = strings.TrimSpace(locale)
+	if locale != "" {
+		query = query.Where("locale = ?", locale)
+	}
+
+	result := query.UpdateColumn("view_count", gorm.Expr("COALESCE(view_count, 0) + ?", 1))
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, gorm.ErrRecordNotFound
+	}
+
+	var post BlogPost
+	lookup := DB.Model(&BlogPost{}).Select("view_count").Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
+	if locale != "" {
+		lookup = lookup.Where("locale = ?", locale)
+	}
+	if err := lookup.First(&post).Error; err != nil {
+		return 0, err
+	}
+	return post.ViewCount, nil
 }
 
 func AdminListBlogPosts(params AdminBlogPostQuery) ([]BlogPostListItem, int64, error) {
@@ -303,5 +344,16 @@ func IsBlogPostSlugConflict(err error) bool {
 }
 
 func blogPostListSelect() []string {
-	return []string{"id", "locale", "slug", "title", "excerpt", "cover_image", "status", "published_at", "author_id", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+	return []string{"id", "locale", "slug", "title", "excerpt", "cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+}
+
+func blogPostOrderBy(sort string) string {
+	switch BlogPostSort(strings.TrimSpace(sort)) {
+	case BlogPostSortPublishedAsc:
+		return "published_at asc, id asc"
+	case BlogPostSortViewsDesc:
+		return "view_count desc, published_at desc, id desc"
+	default:
+		return "published_at desc, id desc"
+	}
 }

@@ -18,7 +18,7 @@ type BlogPostRequest struct {
 
 func GetPublishedBlogPosts(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	posts, total, err := model.GetPublishedBlogPosts(c.Query("locale"), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	posts, total, err := model.GetPublishedBlogPosts(c.Query("locale"), pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.Query("sort"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -39,6 +39,19 @@ func GetPublishedBlogPost(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, post)
+}
+
+func RecordPublishedBlogPostView(c *gin.Context) {
+	viewCount, err := model.IncrementPublishedBlogPostView(c.Query("locale"), c.Param("slug"))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"view_count": viewCount})
 }
 
 func AdminListBlogPosts(c *gin.Context) {
