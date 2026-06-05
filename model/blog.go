@@ -86,6 +86,8 @@ type AdminBlogPostQuery struct {
 type BlogPostSort string
 
 const (
+	BlogPostSortLatest        BlogPostSort = "latest"
+	BlogPostSortPopularity    BlogPostSort = "popularity"
 	BlogPostSortPublishedDesc BlogPostSort = "published_desc"
 	BlogPostSortPublishedAsc  BlogPostSort = "published_asc"
 	BlogPostSortViewsDesc     BlogPostSort = "views_desc"
@@ -351,7 +353,7 @@ func blogPostOrderBy(sort string) string {
 	switch BlogPostSort(strings.TrimSpace(sort)) {
 	case BlogPostSortPublishedAsc:
 		return "published_at asc, id asc"
-	case BlogPostSortViewsDesc:
+	case BlogPostSortViewsDesc, BlogPostSortPopularity:
 		return "view_count desc, published_at desc, id desc"
 	default:
 		return "published_at desc, id desc"
