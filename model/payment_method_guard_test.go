@@ -102,6 +102,39 @@ func TestRechargeWaffoPancake_RejectsMismatchedPaymentMethod(t *testing.T) {
 	assert.Equal(t, 0, getUserQuotaForPaymentGuardTest(t, 101))
 }
 
+func TestRechargeStripe_CreditsRequestedAmountAndKeepsDiscountedPaymentMoney(t *testing.T) {
+	truncateTables(t)
+
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.QuotaPerUnit = 500000
+
+	insertUserForPaymentGuardTest(t, 102, 0)
+	topUp := &TopUp{
+		UserId:          102,
+		Amount:          100,
+		Money:           97,
+		TradeNo:         "stripe-discount-guard",
+		PaymentMethod:   PaymentMethodStripe,
+		PaymentProvider: PaymentProviderStripe,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, topUp.Insert())
+
+	err := Recharge("stripe-discount-guard", "cus_discount_guard", "127.0.0.1")
+	require.NoError(t, err)
+
+	completed := GetTopUpByTradeNo("stripe-discount-guard")
+	require.NotNil(t, completed)
+	assert.Equal(t, common.TopUpStatusSuccess, completed.Status)
+	assert.EqualValues(t, 100, completed.Amount)
+	assert.InDelta(t, 97, completed.Money, 0.000001)
+	assert.Equal(t, int(100*common.QuotaPerUnit), getUserQuotaForPaymentGuardTest(t, 102))
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string

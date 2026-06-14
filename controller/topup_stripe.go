@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -87,22 +88,36 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	id := c.GetInt("id")
 	user, _ := model.GetUserById(id, false)
-	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
+	payMoney := getStripePayMoney(float64(req.Amount), user.Group)
+	stripeQuantity, err := getStripeCheckoutQuantity(payMoney)
+	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe pay amount conversion failed user_id=%d amount=%d pay_money=%.2f error=%q", id, req.Amount, payMoney, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Stripe payment amount configuration is invalid"})
+		return
+	}
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, req.SuccessURL, req.CancelURL)
+	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, stripeQuantity, req.SuccessURL, req.CancelURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建 Checkout Session 失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建 Checkout Session 失败 user_id=%d trade_no=%s amount=%d pay_money=%.2f quantity=%d error=%q", id, referenceId, req.Amount, payMoney, stripeQuantity, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
 
+	amount := req.Amount
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		amount = int64(float64(req.Amount) / common.QuotaPerUnit)
+		if amount < 1 {
+			amount = 1
+		}
+	}
+
 	topUp := &model.TopUp{
 		UserId:          id,
-		Amount:          req.Amount,
-		Money:           chargedMoney,
+		Amount:          amount,
+		Money:           payMoney,
 		TradeNo:         referenceId,
 		PaymentMethod:   model.PaymentMethodStripe,
 		PaymentProvider: model.PaymentProviderStripe,
@@ -115,7 +130,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Stripe 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f", id, referenceId, req.Amount, chargedMoney))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Stripe 充值订单创建成功 user_id=%d trade_no=%s amount=%d money=%.2f quantity=%d", id, referenceId, amount, payMoney, stripeQuantity))
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{
@@ -278,6 +293,11 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 		return
 	}
 
+	if err := validateStripeTopUpPaidAmount(referenceId, event.GetObjectValue("amount_total")); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("Stripe 充值实付金额校验失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
+		return
+	}
+
 	err := model.Recharge(referenceId, customerId, callerIp)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
@@ -413,6 +433,46 @@ func getStripePayMoney(amount float64, group string) float64 {
 	}
 	payMoney := amount * setting.StripeUnitPrice * topupGroupRatio * discount
 	return payMoney
+}
+
+func validateStripeTopUpPaidAmount(referenceId string, amountTotal string) error {
+	topUp := model.GetTopUpByTradeNo(referenceId)
+	if topUp == nil {
+		return fmt.Errorf("top-up order not found")
+	}
+	if topUp.PaymentProvider != model.PaymentProviderStripe {
+		return fmt.Errorf("top-up payment provider mismatch: %s", topUp.PaymentProvider)
+	}
+
+	paidAmountTotal, err := strconv.ParseInt(amountTotal, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid stripe amount_total %q: %w", amountTotal, err)
+	}
+	expectedAmountTotal := int64(math.Round(topUp.Money * 100))
+	if paidAmountTotal != expectedAmountTotal {
+		return fmt.Errorf("stripe amount_total mismatch: paid=%d expected=%d", paidAmountTotal, expectedAmountTotal)
+	}
+	return nil
+}
+
+func getStripeCheckoutQuantity(payMoney float64) (int64, error) {
+	if setting.StripeUnitPrice <= 0 {
+		return 0, fmt.Errorf("stripe unit price must be greater than zero")
+	}
+	if payMoney <= 0 {
+		return 0, fmt.Errorf("stripe pay money must be greater than zero")
+	}
+
+	quantity := payMoney / setting.StripeUnitPrice
+	roundedQuantity := math.Round(quantity)
+	if math.Abs(quantity-roundedQuantity) > 0.000001 {
+		return 0, fmt.Errorf("stripe checkout quantity must be an integer: %.6f", quantity)
+	}
+	if roundedQuantity < 1 {
+		return 0, fmt.Errorf("stripe checkout quantity must be at least 1")
+	}
+
+	return int64(roundedQuantity), nil
 }
 
 func getStripeMinTopup() int64 {
