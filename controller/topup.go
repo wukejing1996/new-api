@@ -440,6 +440,9 @@ func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
+	if err := model.ExpirePendingTopUpsOlderThan(time.Now().Unix(), stripeCheckoutSessionTTLSeconds); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("failed to expire stale pending top-up orders user_id=%d error=%q", userId, err.Error()))
+	}
 
 	var (
 		topups []*model.TopUp

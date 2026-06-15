@@ -26,6 +26,8 @@ import (
 
 var stripeAdaptor = &StripeAdaptor{}
 
+const stripeCheckoutSessionTTLSeconds int64 = 48 * 60 * 60
+
 // StripePayRequest represents a payment request for Stripe checkout.
 type StripePayRequest struct {
 	// Amount is the quantity of units to purchase.
@@ -157,6 +159,102 @@ func RequestStripePay(c *gin.Context) {
 		return
 	}
 	stripeAdaptor.RequestPay(c, &req)
+}
+
+type StripeRetryPayRequest struct {
+	TradeNo    string `json:"trade_no"`
+	SuccessURL string `json:"success_url,omitempty"`
+	CancelURL  string `json:"cancel_url,omitempty"`
+}
+
+func RetryStripePay(c *gin.Context) {
+	var req StripeRetryPayRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.TradeNo) == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "invalid request"})
+		return
+	}
+
+	if req.SuccessURL != "" && common.ValidateRedirectURL(req.SuccessURL) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "payment success redirect URL is not trusted", "data": ""})
+		return
+	}
+
+	if req.CancelURL != "" && common.ValidateRedirectURL(req.CancelURL) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "payment cancel redirect URL is not trusted", "data": ""})
+		return
+	}
+
+	userId := c.GetInt("id")
+	tradeNo := strings.TrimSpace(req.TradeNo)
+	topUp, err := model.GetUserPendingTopUpByTradeNo(userId, tradeNo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "order is not available for payment"})
+		return
+	}
+	if topUp.PaymentProvider != model.PaymentProviderStripe {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "payment method is not supported"})
+		return
+	}
+
+	now := time.Now().Unix()
+	if isStripeTopUpExpired(topUp.CreateTime, now) {
+		if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderStripe, common.TopUpStatusExpired); err != nil &&
+			!errors.Is(err, model.ErrTopUpStatusInvalid) {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry mark expired failed user_id=%d trade_no=%s error=%q", userId, topUp.TradeNo, err.Error()))
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "expired", "data": "order expired"})
+		return
+	}
+
+	user, err := model.GetUserById(userId, false)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "user not found"})
+		return
+	}
+	stripeQuantity, err := getStripeCheckoutQuantity(topUp.Money)
+	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry amount conversion failed user_id=%d trade_no=%s pay_money=%.2f error=%q", userId, topUp.TradeNo, topUp.Money, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Stripe payment amount configuration is invalid"})
+		return
+	}
+
+	reference := fmt.Sprintf("new-api-retry-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
+	referenceId := "ref_" + common.Sha1([]byte(reference))
+
+	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, stripeQuantity, req.SuccessURL, req.CancelURL)
+	if err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry Checkout Session failed user_id=%d old_trade_no=%s new_trade_no=%s money=%.2f quantity=%d error=%q", userId, topUp.TradeNo, referenceId, topUp.Money, stripeQuantity, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "failed to start payment"})
+		return
+	}
+
+	retryTopUp := &model.TopUp{
+		UserId:          userId,
+		Amount:          topUp.Amount,
+		Money:           topUp.Money,
+		TradeNo:         referenceId,
+		PaymentMethod:   model.PaymentMethodStripe,
+		PaymentProvider: model.PaymentProviderStripe,
+		CreateTime:      now,
+		Status:          common.TopUpStatusPending,
+	}
+	if err := retryTopUp.Insert(); err != nil {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry create order failed user_id=%d old_trade_no=%s new_trade_no=%s error=%q", userId, topUp.TradeNo, referenceId, err.Error()))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "failed to create payment order"})
+		return
+	}
+	if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderStripe, common.TopUpStatusExpired); err != nil &&
+		!errors.Is(err, model.ErrTopUpStatusInvalid) {
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry expire old order failed user_id=%d old_trade_no=%s new_trade_no=%s error=%q", userId, topUp.TradeNo, referenceId, err.Error()))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "success",
+		"data": gin.H{
+			"pay_link": payLink,
+			"trade_no": referenceId,
+		},
+	})
 }
 
 func StripeWebhook(c *gin.Context) {
@@ -469,6 +567,10 @@ func getStripeCheckoutQuantity(payMoney float64) (int64, error) {
 	}
 
 	return int64(roundedQuantity), nil
+}
+
+func isStripeTopUpExpired(createTime int64, now int64) bool {
+	return createTime > 0 && now-createTime > stripeCheckoutSessionTTLSeconds
 }
 
 func getStripeMinTopup() int64 {

@@ -104,6 +104,40 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	})
 }
 
+func GetUserPendingTopUpByTradeNo(userId int, tradeNo string) (*TopUp, error) {
+	if tradeNo == "" {
+		return nil, errors.New("tradeNo is empty")
+	}
+
+	topUp := &TopUp{}
+	err := DB.Where("user_id = ? AND trade_no = ? AND status = ?", userId, tradeNo, common.TopUpStatusPending).First(topUp).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrTopUpNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return topUp, nil
+}
+
+func ExpirePendingTopUpsOlderThan(now int64, ttlSeconds int64) error {
+	if ttlSeconds <= 0 {
+		return nil
+	}
+
+	cutoff := now - ttlSeconds
+	if cutoff <= 0 {
+		return nil
+	}
+
+	return DB.Model(&TopUp{}).
+		Where("status = ? AND payment_provider = ? AND create_time < ?", common.TopUpStatusPending, PaymentProviderStripe, cutoff).
+		Updates(map[string]interface{}{
+			"status":        common.TopUpStatusExpired,
+			"complete_time": now,
+		}).Error
+}
+
 func Recharge(referenceId string, customerId string, callerIp string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
