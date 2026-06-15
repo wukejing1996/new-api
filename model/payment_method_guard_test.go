@@ -172,6 +172,56 @@ func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T)
 	}
 }
 
+func TestCreateRetryTopUpFromPending_CopiesOriginalOrderAndExpiresOnce(t *testing.T) {
+	truncateTables(t)
+	insertUserForPaymentGuardTest(t, 160, 0)
+
+	oldTopUp := &TopUp{
+		UserId:          160,
+		Amount:          100,
+		Money:           97,
+		TradeNo:         "stripe-retry-original",
+		PaymentMethod:   PaymentMethodStripe,
+		PaymentProvider: PaymentProviderStripe,
+		Status:          common.TopUpStatusPending,
+		CreateTime:      time.Now().Unix(),
+	}
+	require.NoError(t, oldTopUp.Insert())
+
+	retryTopUp := &TopUp{
+		UserId:          999,
+		Amount:          1,
+		Money:           0.01,
+		TradeNo:         "stripe-retry-new",
+		PaymentMethod:   PaymentMethodWaffo,
+		PaymentProvider: PaymentProviderWaffo,
+		CreateTime:      time.Now().Unix(),
+		Status:          common.TopUpStatusSuccess,
+	}
+	require.NoError(t, CreateRetryTopUpFromPending(160, "stripe-retry-original", retryTopUp))
+
+	expiredOriginal := GetTopUpByTradeNo("stripe-retry-original")
+	require.NotNil(t, expiredOriginal)
+	assert.Equal(t, common.TopUpStatusExpired, expiredOriginal.Status)
+
+	createdRetry := GetTopUpByTradeNo("stripe-retry-new")
+	require.NotNil(t, createdRetry)
+	assert.Equal(t, 160, createdRetry.UserId)
+	assert.EqualValues(t, 100, createdRetry.Amount)
+	assert.InDelta(t, 97, createdRetry.Money, 0.000001)
+	assert.Equal(t, PaymentMethodStripe, createdRetry.PaymentMethod)
+	assert.Equal(t, PaymentProviderStripe, createdRetry.PaymentProvider)
+	assert.Equal(t, common.TopUpStatusPending, createdRetry.Status)
+
+	secondRetry := &TopUp{
+		TradeNo:    "stripe-retry-second",
+		CreateTime: time.Now().Unix(),
+	}
+	err := CreateRetryTopUpFromPending(160, "stripe-retry-original", secondRetry)
+	require.ErrorIs(t, err, ErrTopUpStatusInvalid)
+	assert.Nil(t, GetTopUpByTradeNo("stripe-retry-second"))
+}
+
 func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
 	truncateTables(t)
 

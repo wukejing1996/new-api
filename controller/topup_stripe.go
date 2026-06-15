@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v81"
@@ -46,6 +48,10 @@ type StripeAdaptor struct {
 }
 
 func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
+	if !isStripeTopUpEnabled() {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Stripe payment is not available"})
+		return
+	}
 	if req.Amount < getStripeMinTopup() {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getStripeMinTopup())})
 		return
@@ -65,6 +71,10 @@ func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 }
 
 func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
+	if !isStripeTopUpEnabled() {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Stripe payment is not available"})
+		return
+	}
 	if req.PaymentMethod != model.PaymentMethodStripe {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "不支持的支付渠道"})
 		return
@@ -78,12 +88,12 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		return
 	}
 
-	if req.SuccessURL != "" && common.ValidateRedirectURL(req.SuccessURL) != nil {
+	if req.SuccessURL != "" && validateStripeRedirectURL(req.SuccessURL) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "支付成功重定向URL不在可信任域名列表中", "data": ""})
 		return
 	}
 
-	if req.CancelURL != "" && common.ValidateRedirectURL(req.CancelURL) != nil {
+	if req.CancelURL != "" && validateStripeRedirectURL(req.CancelURL) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "支付取消重定向URL不在可信任域名列表中", "data": ""})
 		return
 	}
@@ -174,12 +184,17 @@ func RetryStripePay(c *gin.Context) {
 		return
 	}
 
-	if req.SuccessURL != "" && common.ValidateRedirectURL(req.SuccessURL) != nil {
+	if !isStripeTopUpEnabled() {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Stripe payment is not available"})
+		return
+	}
+
+	if req.SuccessURL != "" && validateStripeRedirectURL(req.SuccessURL) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "payment success redirect URL is not trusted", "data": ""})
 		return
 	}
 
-	if req.CancelURL != "" && common.ValidateRedirectURL(req.CancelURL) != nil {
+	if req.CancelURL != "" && validateStripeRedirectURL(req.CancelURL) != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "payment cancel redirect URL is not trusted", "data": ""})
 		return
 	}
@@ -229,23 +244,13 @@ func RetryStripePay(c *gin.Context) {
 	}
 
 	retryTopUp := &model.TopUp{
-		UserId:          userId,
-		Amount:          topUp.Amount,
-		Money:           topUp.Money,
-		TradeNo:         referenceId,
-		PaymentMethod:   model.PaymentMethodStripe,
-		PaymentProvider: model.PaymentProviderStripe,
-		CreateTime:      now,
-		Status:          common.TopUpStatusPending,
+		TradeNo:    referenceId,
+		CreateTime: now,
 	}
-	if err := retryTopUp.Insert(); err != nil {
+	if err := model.CreateRetryTopUpFromPending(userId, topUp.TradeNo, retryTopUp); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry create order failed user_id=%d old_trade_no=%s new_trade_no=%s error=%q", userId, topUp.TradeNo, referenceId, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "failed to create payment order"})
 		return
-	}
-	if err := model.UpdatePendingTopUpStatus(topUp.TradeNo, model.PaymentProviderStripe, common.TopUpStatusExpired); err != nil &&
-		!errors.Is(err, model.ErrTopUpStatusInvalid) {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe retry expire old order failed user_id=%d old_trade_no=%s new_trade_no=%s error=%q", userId, topUp.TradeNo, referenceId, err.Error()))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -547,6 +552,50 @@ func validateStripeTopUpPaidAmount(referenceId string, amountTotal string) error
 		return fmt.Errorf("stripe amount_total mismatch: paid=%d expected=%d", paidAmountTotal, expectedAmountTotal)
 	}
 	return nil
+}
+
+func validateStripeRedirectURL(rawURL string) error {
+	if err := common.ValidateRedirectURL(rawURL); err == nil {
+		return nil
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %s", err.Error())
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: only http and https are allowed")
+	}
+
+	redirectDomain := strings.ToLower(parsedURL.Hostname())
+	if redirectDomain == "" {
+		return fmt.Errorf("redirect URL domain is empty")
+	}
+
+	for _, trustedDomain := range []string{
+		domainFromURL(system_setting.ServerAddress),
+	} {
+		if domainMatchesTrustedDomain(redirectDomain, trustedDomain) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("domain %s is not trusted", redirectDomain)
+}
+
+func domainFromURL(rawURL string) string {
+	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsedURL.Hostname())
+}
+
+func domainMatchesTrustedDomain(domain string, trustedDomain string) bool {
+	if domain == "" || trustedDomain == "" {
+		return false
+	}
+	return domain == trustedDomain || strings.HasSuffix(domain, "."+trustedDomain)
 }
 
 func getStripeCheckoutQuantity(payMoney float64) (int64, error) {

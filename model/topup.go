@@ -120,6 +120,54 @@ func GetUserPendingTopUpByTradeNo(userId int, tradeNo string) (*TopUp, error) {
 	return topUp, nil
 }
 
+func CreateRetryTopUpFromPending(userId int, oldTradeNo string, newTopUp *TopUp) error {
+	if oldTradeNo == "" || newTopUp == nil || newTopUp.TradeNo == "" {
+		return errors.New("invalid retry top-up")
+	}
+
+	return DB.Transaction(func(tx *gorm.DB) error {
+		oldTopUp := &TopUp{}
+		if err := tx.Where("user_id = ? AND trade_no = ?", userId, oldTradeNo).First(oldTopUp).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTopUpNotFound
+			}
+			return err
+		}
+		if oldTopUp.PaymentProvider != PaymentProviderStripe {
+			return ErrPaymentMethodMismatch
+		}
+		if oldTopUp.Status != common.TopUpStatusPending {
+			return ErrTopUpStatusInvalid
+		}
+
+		newTopUp.UserId = oldTopUp.UserId
+		newTopUp.Amount = oldTopUp.Amount
+		newTopUp.Money = oldTopUp.Money
+		newTopUp.PaymentMethod = PaymentMethodStripe
+		newTopUp.PaymentProvider = PaymentProviderStripe
+		newTopUp.Status = common.TopUpStatusPending
+
+		result := tx.Model(&TopUp{}).
+			Where("user_id = ? AND trade_no = ? AND payment_provider = ? AND status = ?", userId, oldTradeNo, PaymentProviderStripe, common.TopUpStatusPending).
+			Updates(map[string]interface{}{
+				"status":        common.TopUpStatusExpired,
+				"complete_time": newTopUp.CreateTime,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrTopUpStatusInvalid
+		}
+
+		if err := tx.Create(newTopUp).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
 func ExpirePendingTopUpsOlderThan(now int64, ttlSeconds int64) error {
 	if ttlSeconds <= 0 {
 		return nil

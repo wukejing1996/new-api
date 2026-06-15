@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -99,4 +100,17 @@ func TestValidateStripeTopUpPaidAmount(t *testing.T) {
 
 	require.NoError(t, validateStripeTopUpPaidAmount("stripe-paid-amount-check", "9700"))
 	require.Error(t, validateStripeTopUpPaidAmount("stripe-paid-amount-check", "9600"))
+}
+
+func TestValidateStripeRedirectURLTrustsServerAddressDomain(t *testing.T) {
+	originalServerAddress := system_setting.ServerAddress
+	t.Cleanup(func() {
+		system_setting.ServerAddress = originalServerAddress
+	})
+	system_setting.ServerAddress = "https://costrouter.ai"
+
+	require.NoError(t, validateStripeRedirectURL("https://costrouter.ai/en/dashboard#wallet"))
+	require.NoError(t, validateStripeRedirectURL("https://app.costrouter.ai/en/dashboard#wallet"))
+	require.Error(t, validateStripeRedirectURL("https://fakecostrouter.ai/en/dashboard#wallet"))
+	require.Error(t, validateStripeRedirectURL("javascript:alert(1)"))
 }
