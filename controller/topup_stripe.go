@@ -369,14 +369,10 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 	if successURL == "" {
 		successURL = paymentReturnPath("/console/log")
 	}
-	if cancelURL == "" {
-		cancelURL = paymentReturnPath("/console/topup")
-	}
 
 	params := &stripe.CheckoutSessionParams{
 		ClientReferenceID: stripe.String(referenceId),
 		SuccessURL:        stripe.String(successURL),
-		CancelURL:         stripe.String(cancelURL),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				Price:    stripe.String(setting.StripePriceId),
