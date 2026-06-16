@@ -17,17 +17,35 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type Table } from '@tanstack/react-table'
+import { Mail } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
+import { Button } from '@/components/ui/button'
 import { type User } from '../types'
+import { useUsers } from './users-provider'
 
 interface DataTableBulkActionsProps {
   table: Table<User>
 }
 
 export function DataTableBulkActions({ table }: DataTableBulkActionsProps) {
+  const { t } = useTranslation()
+  const { setOpen, setSelectedEmailUsers } = useUsers()
+  const selectedUsers = table
+    .getFilteredSelectedRowModel()
+    .rows.map((row) => row.original)
+
+  const handleSendEmail = () => {
+    setSelectedEmailUsers(selectedUsers)
+    setOpen('email')
+  }
+
   return (
     <BulkActionsToolbar table={table} entityName='user'>
-      <></>
+      <Button size='sm' variant='outline' onClick={handleSendEmail}>
+        <Mail className='h-4 w-4' />
+        {t('Send Email Notification')}
+      </Button>
     </BulkActionsToolbar>
   )
 }

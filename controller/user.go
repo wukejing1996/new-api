@@ -264,6 +264,44 @@ func SearchUsers(c *gin.Context) {
 	return
 }
 
+func BroadcastEmail(c *gin.Context) {
+	var req service.EmailBroadcastRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	req.Subject = strings.TrimSpace(req.Subject)
+	req.Content = strings.TrimSpace(req.Content)
+	if !req.DryRun && (req.Subject == "" || req.Content == "") {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	result, err := service.SendEmailBroadcast(req)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	adminInfo := map[string]interface{}{
+		"admin_id":       c.GetInt("id"),
+		"admin_username": c.GetString("username"),
+		"target_type":    req.Target.Type,
+		"dry_run":        req.DryRun,
+		"total":          result.Total,
+		"sent":           result.Sent,
+		"skipped":        result.Skipped,
+		"failed":         result.Failed,
+	}
+	if !req.DryRun {
+		model.RecordLogWithAdminInfo(c.GetInt("id"), model.LogTypeManage,
+			fmt.Sprintf("Admin sent email notification: %s", req.Subject), adminInfo)
+	}
+
+	common.ApiSuccess(c, result)
+}
+
 func canManageTargetRole(myRole int, targetRole int) bool {
 	return myRole == common.RoleRootUser || myRole > targetRole
 }

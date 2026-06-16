@@ -123,8 +123,35 @@ export interface ManageUserQuotaPayload {
   value: number
 }
 
+export type EmailBroadcastTargetType = 'all' | 'selected'
+
+export interface EmailBroadcastRequest {
+  target: {
+    type: EmailBroadcastTargetType
+    user_ids?: number[]
+  }
+  subject: string
+  content: string
+  dry_run?: boolean
+}
+
+export interface EmailBroadcastFailure {
+  user_id: number
+  email: string
+  error: string
+}
+
+export interface EmailBroadcastResult {
+  total: number
+  sent: number
+  skipped: number
+  failed: number
+  failures?: EmailBroadcastFailure[]
+  dry_run: boolean
+}
+
 // ============================================================================
 // Dialog Types
 // ============================================================================
 
-export type UsersDialogType = 'create' | 'update' | 'delete'
+export type UsersDialogType = 'create' | 'update' | 'delete' | 'email'

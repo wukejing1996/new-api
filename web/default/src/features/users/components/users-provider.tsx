@@ -25,6 +25,8 @@ type UsersContextType = {
   setOpen: (str: UsersDialogType | null) => void
   currentRow: User | null
   setCurrentRow: React.Dispatch<React.SetStateAction<User | null>>
+  selectedEmailUsers: User[]
+  setSelectedEmailUsers: React.Dispatch<React.SetStateAction<User[]>>
   refreshTrigger: number
   triggerRefresh: () => void
 }
@@ -34,6 +36,7 @@ const UsersContext = React.createContext<UsersContextType | null>(null)
 export function UsersProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useDialogState<UsersDialogType>(null)
   const [currentRow, setCurrentRow] = useState<User | null>(null)
+  const [selectedEmailUsers, setSelectedEmailUsers] = useState<User[]>([])
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const triggerRefresh = () => setRefreshTrigger((prev) => prev + 1)
@@ -45,6 +48,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
         setOpen,
         currentRow,
         setCurrentRow,
+        selectedEmailUsers,
+        setSelectedEmailUsers,
         refreshTrigger,
         triggerRefresh,
       }}

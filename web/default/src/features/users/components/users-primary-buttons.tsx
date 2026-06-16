@@ -16,22 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Plus } from 'lucide-react'
+import { Mail, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { useUsers } from './users-provider'
 
 export function UsersPrimaryButtons() {
   const { t } = useTranslation()
-  const { setOpen, setCurrentRow } = useUsers()
+  const { setOpen, setCurrentRow, setSelectedEmailUsers } = useUsers()
 
   const handleCreate = () => {
     setCurrentRow(null)
     setOpen('create')
   }
 
+  const handleSendEmail = () => {
+    setSelectedEmailUsers([])
+    setOpen('email')
+  }
+
   return (
     <div className='flex gap-2'>
+      <Button size='sm' variant='outline' onClick={handleSendEmail}>
+        <Mail className='h-4 w-4' />
+        {t('Send Email Notification')}
+      </Button>
       <Button size='sm' onClick={handleCreate}>
         <Plus className='h-4 w-4' />
         {t('Add User')}

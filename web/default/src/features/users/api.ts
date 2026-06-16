@@ -25,6 +25,8 @@ import type {
   UserFormData,
   ManageUserAction,
   ManageUserQuotaPayload,
+  EmailBroadcastRequest,
+  EmailBroadcastResult,
   ApiResponse,
 } from './types'
 
@@ -110,6 +112,16 @@ export async function adjustUserQuota(
   payload: ManageUserQuotaPayload
 ): Promise<ApiResponse<Partial<User>>> {
   const res = await api.post('/api/user/manage', payload)
+  return res.data
+}
+
+/**
+ * Send an email notification to all users or selected users.
+ */
+export async function sendEmailNotification(
+  data: EmailBroadcastRequest
+): Promise<ApiResponse<EmailBroadcastResult>> {
+  const res = await api.post('/api/user/broadcast_email', data)
   return res.data
 }
 
