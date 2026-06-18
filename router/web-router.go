@@ -28,6 +28,10 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
+	router.Use(func(c *gin.Context) {
+		c.Header("X-Robots-Tag", "noindex, nofollow, noarchive")
+		c.Next()
+	})
 	router.Use(middleware.Cache())
 	router.Use(static.Serve("/", themeFS))
 	router.NoRoute(func(c *gin.Context) {
