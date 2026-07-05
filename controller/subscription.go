@@ -72,7 +72,7 @@ func UpdateSubscriptionPreference(c *gin.Context) {
 	userId := c.GetInt("id")
 	var req BillingPreferenceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	pref := common.NormalizeBillingPreference(req.BillingPreference)
@@ -120,7 +120,7 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 
 	var req AdminUpsertSubscriptionPlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	req.Plan.Id = 0
@@ -187,7 +187,7 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 	}
 	var req AdminUpsertSubscriptionPlanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	if strings.TrimSpace(req.Plan.Title) == "" {
@@ -284,7 +284,7 @@ func AdminUpdateSubscriptionPlanStatus(c *gin.Context) {
 	}
 	var req AdminUpdateSubscriptionPlanStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	if err := model.DB.Model(&model.SubscriptionPlan{}).Where("id = ?", id).Update("enabled", *req.Enabled).Error; err != nil {
@@ -307,7 +307,7 @@ func AdminBindSubscription(c *gin.Context) {
 
 	var req AdminBindSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.UserId <= 0 || req.PlanId <= 0 {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	msg, err := model.AdminBindSubscription(req.UserId, req.PlanId, "")
@@ -355,7 +355,7 @@ func AdminCreateUserSubscription(c *gin.Context) {
 	}
 	var req AdminCreateUserSubscriptionRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.PlanId <= 0 {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorMsg(c, "invalid parameter")
 		return
 	}
 	msg, err := model.AdminBindSubscription(userId, req.PlanId, "")

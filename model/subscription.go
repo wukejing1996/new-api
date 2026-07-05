@@ -453,7 +453,7 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 			return nil, err
 		}
 		if count >= int64(plan.MaxPurchasePerUser) {
-			return nil, errors.New("已达到该套餐购买上限")
+			return nil, errors.New("purchase limit reached for this plan")
 		}
 	}
 	nowUnix := GetDBTimestamp()

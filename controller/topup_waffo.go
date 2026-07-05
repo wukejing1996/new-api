@@ -102,7 +102,7 @@ type WaffoPayRequest struct {
 func RequestWaffoAmount(c *gin.Context) {
 	var req WaffoPayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "invalid parameter"})
 		return
 	}
 
@@ -137,7 +137,7 @@ func RequestWaffoPay(c *gin.Context) {
 
 	var req WaffoPayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "invalid parameter"})
 		return
 	}
 	waffoMinTopup := int64(setting.WaffoMinTopUp)

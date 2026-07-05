@@ -60,7 +60,7 @@ func memoryEmailVerificationRateLimiter(c *gin.Context) {
 	if !inMemoryRateLimiter.Request(key, EmailVerificationMaxRequests, EmailVerificationDuration) {
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"success": false,
-			"message": "发送过于频繁，请稍后再试",
+			"message": "Requests are too frequent. Please try again later.",
 		})
 		c.Abort()
 		return

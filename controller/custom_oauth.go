@@ -142,7 +142,7 @@ type FetchCustomOAuthDiscoveryRequest struct {
 func FetchCustomOAuthDiscovery(c *gin.Context) {
 	var req FetchCustomOAuthDiscoveryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "无效的请求参数: "+err.Error())
+		common.ApiErrorMsg(c, "invalid request parameters: "+err.Error())
 		return
 	}
 
@@ -214,7 +214,7 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 func CreateCustomOAuthProvider(c *gin.Context) {
 	var req CreateCustomOAuthProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "无效的请求参数: "+err.Error())
+		common.ApiErrorMsg(c, "invalid request parameters: "+err.Error())
 		return
 	}
 
@@ -299,7 +299,7 @@ func UpdateCustomOAuthProvider(c *gin.Context) {
 
 	var req UpdateCustomOAuthProviderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.ApiErrorMsg(c, "无效的请求参数: "+err.Error())
+		common.ApiErrorMsg(c, "invalid request parameters: "+err.Error())
 		return
 	}
 

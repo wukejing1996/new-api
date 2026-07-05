@@ -84,17 +84,17 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		return
 	}
 	if req.Amount > 10000 {
-		c.JSON(http.StatusOK, gin.H{"message": "充值数量不能大于 10000", "data": 10})
+		c.JSON(http.StatusOK, gin.H{"message": "top-up amount cannot exceed 10000", "data": 10})
 		return
 	}
 
 	if req.SuccessURL != "" && validateStripeRedirectURL(req.SuccessURL) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "支付成功重定向URL不在可信任域名列表中", "data": ""})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "payment success redirect URL is not in the trusted domain list", "data": ""})
 		return
 	}
 
 	if req.CancelURL != "" && validateStripeRedirectURL(req.CancelURL) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "支付取消重定向URL不在可信任域名列表中", "data": ""})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "payment cancel redirect URL is not in the trusted domain list", "data": ""})
 		return
 	}
 
@@ -155,7 +155,7 @@ func RequestStripeAmount(c *gin.Context) {
 	var req StripePayRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "invalid parameter"})
 		return
 	}
 	stripeAdaptor.RequestAmount(c, &req)
@@ -165,7 +165,7 @@ func RequestStripePay(c *gin.Context) {
 	var req StripePayRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "invalid parameter"})
 		return
 	}
 	stripeAdaptor.RequestPay(c, &req)
@@ -438,7 +438,7 @@ func sessionExpired(ctx context.Context, event stripe.Event) {
 
 	err := model.UpdatePendingTopUpStatus(referenceId, model.PaymentProviderStripe, common.TopUpStatusExpired)
 	if errors.Is(err, model.ErrTopUpNotFound) {
-		logger.LogWarn(ctx, fmt.Sprintf("Stripe 充值订单不存在，无法标记过期 trade_no=%s", referenceId))
+		logger.LogWarn(ctx, fmt.Sprintf("Stripe top-up order does not exist，无法标记过期 trade_no=%s", referenceId))
 		return
 	}
 	if err != nil {
@@ -463,7 +463,7 @@ func sessionExpired(ctx context.Context, event stripe.Event) {
 // Returns the checkout session URL or an error if the session creation fails.
 func genStripeLink(referenceId string, customerId string, email string, amount int64, successURL string, cancelURL string) (string, error) {
 	if !strings.HasPrefix(setting.StripeApiSecret, "sk_") && !strings.HasPrefix(setting.StripeApiSecret, "rk_") {
-		return "", fmt.Errorf("无效的Stripe API密钥")
+		return "", fmt.Errorf("invalid Stripe API key")
 	}
 
 	stripe.Key = setting.StripeApiSecret
