@@ -27,12 +27,35 @@ import {
 import i18next from 'i18next'
 import { toast } from 'sonner'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
-import { api, getSelf } from '@/lib/api'
+import { api, getSelf, getStatus } from '@/lib/api'
 import { OAuthCallbackScreen } from '@/features/auth/components/oauth-callback-screen'
 import { OAUTH_BIND_STORAGE_KEY } from '@/features/auth/constants'
 
 type OAuthRequestConfig = AxiosRequestConfig & {
   skipBusinessError?: boolean
+}
+
+const PRODUCT_DASHBOARD_PATH = '/en/dashboard'
+
+async function getDefaultLoginRedirect() {
+  try {
+    const status = (await getStatus()) as { server_address?: unknown }
+    const serverAddress =
+      typeof status?.server_address === 'string'
+        ? status.server_address.trim()
+        : ''
+    if (serverAddress) {
+      return `${serverAddress.replace(/\/+$/, '')}${PRODUCT_DASHBOARD_PATH}`
+    }
+  } catch (_error) {
+    void _error
+  }
+
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}${PRODUCT_DASHBOARD_PATH}`
+  }
+
+  return PRODUCT_DASHBOARD_PATH
 }
 
 function OAuthCallback() {
@@ -59,6 +82,10 @@ function OAuthCallback() {
   useEffect(() => {
     ;(async () => {
       const safeNavigate = (target: string) => {
+        if (typeof window !== 'undefined' && /^https?:\/\//.test(target)) {
+          window.location.replace(target)
+          return
+        }
         navigate({ to: target as never, replace: true })
         if (typeof window !== 'undefined') {
           setTimeout(() => {
@@ -142,8 +169,9 @@ function OAuthCallback() {
         return false
       }
 
-      const redirectAfterLogin = (target?: string) => {
-        const to = target || search?.redirect || '/dashboard'
+      const redirectAfterLogin = async (target?: string) => {
+        const to =
+          target || search?.redirect || (await getDefaultLoginRedirect())
         safeNavigate(to)
         toast.success(i18next.t('Signed in successfully!'))
       }
@@ -155,7 +183,7 @@ function OAuthCallback() {
 
       const handleLoginFailure = async (message: string) => {
         if (await finalizeLogin()) {
-          redirectAfterLogin()
+          await redirectAfterLogin()
           return
         }
         toast.error(message)
@@ -193,11 +221,11 @@ function OAuthCallback() {
             } catch (_error) {
               void _error
             }
-            redirectAfterLogin()
+            await redirectAfterLogin()
             return
           }
           if (await finalizeLogin()) {
-            redirectAfterLogin()
+            await redirectAfterLogin()
             return
           }
           toast.error(res?.data?.message || i18next.t('OAuth failed'))
@@ -209,7 +237,7 @@ function OAuthCallback() {
           // When logging in with an already bound GitHub account, backend may return this message
           if (message === 'This GitHub account is already linked') {
             if (await finalizeLogin()) {
-              redirectAfterLogin()
+              await redirectAfterLogin()
               return
             }
           }
