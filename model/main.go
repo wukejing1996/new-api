@@ -268,7 +268,7 @@ func migrateDB() error {
 		return err
 	}
 	if err := migrateBlogLocaleToGlobalSlug(); err != nil {
-		return err
+		common.SysLog(fmt.Sprintf("Warning: failed to migrate blog locale column: %v", err))
 	}
 
 	err := DB.AutoMigrate(
@@ -324,7 +324,7 @@ func migrateDB() error {
 
 func migrateDBFast() error {
 	if err := migrateBlogLocaleToGlobalSlug(); err != nil {
-		return err
+		common.SysLog(fmt.Sprintf("Warning: failed to migrate blog locale column: %v", err))
 	}
 
 	var wg sync.WaitGroup
