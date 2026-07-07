@@ -25,6 +25,7 @@ var sitemapStaticPaths = []string{
 	"",
 	"/models",
 	"/docs",
+	"/docs/how-to-use",
 	"/about",
 	"/blog",
 }
