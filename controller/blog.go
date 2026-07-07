@@ -18,7 +18,7 @@ type BlogPostRequest struct {
 
 func GetPublishedBlogPosts(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	posts, total, err := model.GetPublishedBlogPosts(c.Query("locale"), pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.Query("sort"))
+	posts, total, err := model.GetPublishedBlogPosts(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.Query("sort"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -29,7 +29,7 @@ func GetPublishedBlogPosts(c *gin.Context) {
 }
 
 func GetPublishedBlogPost(c *gin.Context) {
-	post, err := model.GetPublishedBlogPost(c.Query("locale"), c.Param("slug"))
+	post, err := model.GetPublishedBlogPost(c.Param("slug"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
@@ -42,7 +42,7 @@ func GetPublishedBlogPost(c *gin.Context) {
 }
 
 func RecordPublishedBlogPostView(c *gin.Context) {
-	viewCount, err := model.IncrementPublishedBlogPostView(c.Query("locale"), c.Param("slug"))
+	viewCount, err := model.IncrementPublishedBlogPostView(c.Param("slug"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
@@ -57,7 +57,6 @@ func RecordPublishedBlogPostView(c *gin.Context) {
 func AdminListBlogPosts(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	posts, total, err := model.AdminListBlogPosts(model.AdminBlogPostQuery{
-		Locale:  c.Query("locale"),
 		Status:  c.Query("status"),
 		Keyword: c.Query("keyword"),
 		Offset:  pageInfo.GetStartIdx(),
@@ -110,7 +109,7 @@ func AdminCreateBlogPost(c *gin.Context) {
 	}
 	if err := model.CreateBlogPost(&post); err != nil {
 		if model.IsBlogPostSlugConflict(err) {
-			common.ApiErrorMsg(c, "Article slug already exists for this locale")
+			common.ApiErrorMsg(c, "Article slug already exists")
 			return
 		}
 		common.ApiError(c, err)
@@ -145,7 +144,7 @@ func AdminUpdateBlogPost(c *gin.Context) {
 			return
 		}
 		if model.IsBlogPostSlugConflict(err) {
-			common.ApiErrorMsg(c, "Article slug already exists for this locale")
+			common.ApiErrorMsg(c, "Article slug already exists")
 			return
 		}
 		common.ApiError(c, err)

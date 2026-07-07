@@ -21,14 +21,12 @@ var (
 	blogEventAttrPattern = regexp.MustCompile(`(?is)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
 	blogJSHrefPattern    = regexp.MustCompile(`(?is)\s+(href|src)\s*=\s*("|\')\s*javascript:[^"\']*("|\')`)
 	blogDataHrefPattern  = regexp.MustCompile(`(?is)\s+(href|src)\s*=\s*("|\')\s*data:text/html[^"\']*("|\')`)
-	blogAllowedLocale    = regexp.MustCompile(`^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?$`)
 )
 
 type BlogPost struct {
 	Id int `json:"id"`
 
-	Locale string `json:"locale" gorm:"type:varchar(16);not null;uniqueIndex:idx_blog_locale_slug,priority:1;index"`
-	Slug   string `json:"slug" gorm:"type:varchar(160);not null;uniqueIndex:idx_blog_locale_slug,priority:2"`
+	Slug string `json:"slug" gorm:"type:varchar(160);not null;uniqueIndex"`
 
 	Title       string `json:"title" gorm:"type:varchar(255);not null"`
 	Excerpt     string `json:"excerpt" gorm:"type:text"`
@@ -54,8 +52,7 @@ type BlogPost struct {
 type BlogPostListItem struct {
 	Id int `json:"id"`
 
-	Locale string `json:"locale"`
-	Slug   string `json:"slug"`
+	Slug string `json:"slug"`
 
 	Title       string `json:"title"`
 	Excerpt     string `json:"excerpt"`
@@ -76,7 +73,6 @@ type BlogPostListItem struct {
 }
 
 type AdminBlogPostQuery struct {
-	Locale  string
 	Status  string
 	Keyword string
 	Offset  int
@@ -111,7 +107,6 @@ func ValidateAndNormalizeBlogPost(post *BlogPost) error {
 	if post == nil {
 		return errors.New("article is required")
 	}
-	post.Locale = strings.TrimSpace(post.Locale)
 	post.Slug = strings.TrimSpace(strings.ToLower(post.Slug))
 	post.Title = strings.TrimSpace(post.Title)
 	post.Excerpt = strings.TrimSpace(post.Excerpt)
@@ -124,9 +119,6 @@ func ValidateAndNormalizeBlogPost(post *BlogPost) error {
 	post.Status = normalizeBlogStatus(post.Status)
 	post.ContentHTML = sanitizeBlogHTML(post.ContentHTML)
 
-	if post.Locale == "" || !blogAllowedLocale.MatchString(post.Locale) {
-		return errors.New("article locale is invalid")
-	}
 	if post.Slug == "" || !blogSlugPattern.MatchString(post.Slug) {
 		return errors.New("article slug must use lowercase letters, numbers, and hyphens")
 	}
@@ -167,13 +159,9 @@ func sanitizeBlogHTML(value string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-func GetPublishedBlogPosts(locale string, offset int, limit int, sort string) ([]BlogPostListItem, int64, error) {
+func GetPublishedBlogPosts(offset int, limit int, sort string) ([]BlogPostListItem, int64, error) {
 	var posts []BlogPostListItem
 	query := DB.Model(&BlogPost{}).Where("status = ?", BlogPostStatusPublished)
-	locale = strings.TrimSpace(locale)
-	if locale != "" {
-		query = query.Where("locale = ?", locale)
-	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -193,36 +181,28 @@ func GetAllPublishedBlogPostsForSitemap() ([]BlogPostListItem, error) {
 	var posts []BlogPostListItem
 	err := DB.Model(&BlogPost{}).
 		Where("status = ?", BlogPostStatusPublished).
-		Select([]string{"id", "locale", "slug", "updated_at"}).
-		Order("locale asc, published_at desc, id desc").
+		Select([]string{"id", "slug", "updated_at"}).
+		Order("published_at desc, id desc").
 		Find(&posts).Error
 	return posts, err
 }
 
-func GetPublishedBlogPost(locale string, slug string) (*BlogPost, error) {
+func GetPublishedBlogPost(slug string) (*BlogPost, error) {
 	var post BlogPost
 	query := DB.Where("status = ? AND slug = ?", BlogPostStatusPublished, strings.TrimSpace(slug))
-	locale = strings.TrimSpace(locale)
-	if locale != "" {
-		query = query.Where("locale = ?", locale)
-	}
 	if err := query.First(&post).Error; err != nil {
 		return nil, err
 	}
 	return &post, nil
 }
 
-func IncrementPublishedBlogPostView(locale string, slug string) (int64, error) {
+func IncrementPublishedBlogPostView(slug string) (int64, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return 0, gorm.ErrRecordNotFound
 	}
 
 	query := DB.Model(&BlogPost{}).Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
-	locale = strings.TrimSpace(locale)
-	if locale != "" {
-		query = query.Where("locale = ?", locale)
-	}
 
 	result := query.UpdateColumn("view_count", gorm.Expr("COALESCE(view_count, 0) + ?", 1))
 	if result.Error != nil {
@@ -234,9 +214,6 @@ func IncrementPublishedBlogPostView(locale string, slug string) (int64, error) {
 
 	var post BlogPost
 	lookup := DB.Model(&BlogPost{}).Select("view_count").Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
-	if locale != "" {
-		lookup = lookup.Where("locale = ?", locale)
-	}
 	if err := lookup.First(&post).Error; err != nil {
 		return 0, err
 	}
@@ -246,9 +223,6 @@ func IncrementPublishedBlogPostView(locale string, slug string) (int64, error) {
 func AdminListBlogPosts(params AdminBlogPostQuery) ([]BlogPostListItem, int64, error) {
 	var posts []BlogPostListItem
 	query := DB.Model(&BlogPost{})
-	if locale := strings.TrimSpace(params.Locale); locale != "" {
-		query = query.Where("locale = ?", locale)
-	}
 	if status := strings.TrimSpace(params.Status); status != "" {
 		query = query.Where("status = ?", normalizeBlogStatus(status))
 	}
@@ -289,7 +263,6 @@ func UpdateBlogPost(post *BlogPost) error {
 		return errors.New("invalid article id")
 	}
 	update := map[string]interface{}{
-		"locale":          post.Locale,
 		"slug":            post.Slug,
 		"title":           post.Title,
 		"excerpt":         post.Excerpt,
@@ -346,7 +319,7 @@ func IsBlogPostSlugConflict(err error) bool {
 }
 
 func blogPostListSelect() []string {
-	return []string{"id", "locale", "slug", "title", "excerpt", "cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+	return []string{"id", "slug", "title", "excerpt", "cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
 }
 
 func blogPostOrderBy(sort string) string {

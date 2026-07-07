@@ -62,12 +62,11 @@ func GetSitemap(c *gin.Context) {
 	}
 
 	for _, post := range posts {
-		slug, ok := sitemapLocaleSlugs[post.Locale]
-		if !ok || post.Slug == "" {
+		if post.Slug == "" {
 			continue
 		}
 		url := sitemapURL{
-			Loc: baseURL + "/" + slug + "/blog/" + post.Slug,
+			Loc: baseURL + "/blog/" + post.Slug,
 		}
 		if post.UpdatedAt > 0 {
 			url.LastMod = time.Unix(post.UpdatedAt, 0).UTC().Format(sitemapDateFormat)

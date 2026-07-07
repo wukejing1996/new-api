@@ -267,6 +267,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	if err := migrateBlogLocaleToGlobalSlug(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -320,6 +323,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := migrateBlogLocaleToGlobalSlug(); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 
@@ -574,6 +580,112 @@ PRIMARY KEY (` + "`id`" + `)
 		}
 	}
 	return nil
+}
+
+// migrateBlogLocaleToGlobalSlug removes the old per-locale blog identity. Existing
+// duplicate slugs are kept by suffixing later rows with their id before the unique
+// slug index is created by AutoMigrate.
+func migrateBlogLocaleToGlobalSlug() error {
+	tableName := "blog_posts"
+	if !DB.Migrator().HasTable(tableName) {
+		return nil
+	}
+
+	var rows []struct {
+		Id   int
+		Slug string
+	}
+	if err := DB.Table(tableName).Select("id, slug").Order("slug asc, id asc").Find(&rows).Error; err != nil {
+		return err
+	}
+
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		slug := strings.TrimSpace(row.Slug)
+		if slug == "" {
+			continue
+		}
+		if _, ok := seen[slug]; !ok {
+			seen[slug] = struct{}{}
+			continue
+		}
+
+		nextSlug := uniqueBlogSlugForMigration(slug, row.Id, seen)
+		if err := DB.Table(tableName).Where("id = ?", row.Id).Update("slug", nextSlug).Error; err != nil {
+			return err
+		}
+		seen[nextSlug] = struct{}{}
+	}
+
+	if err := dropBlogLocaleSlugIndex(tableName); err != nil {
+		return err
+	}
+
+	hasLocale, err := tableHasColumn(tableName, "locale")
+	if err != nil {
+		return err
+	}
+	if hasLocale {
+		if err := DB.Migrator().DropColumn(tableName, "locale"); err != nil {
+			return fmt.Errorf("failed to drop %s.locale: %w", tableName, err)
+		}
+	}
+
+	return nil
+}
+
+func uniqueBlogSlugForMigration(slug string, id int, seen map[string]struct{}) string {
+	base := strings.Trim(slug, "-")
+	if base == "" {
+		base = "post"
+	}
+
+	for attempt := 0; ; attempt++ {
+		suffix := fmt.Sprintf("-%d", id)
+		if attempt > 0 {
+			suffix = fmt.Sprintf("-%d-%d", id, attempt)
+		}
+		maxBaseLength := 160 - len(suffix)
+		if maxBaseLength < 1 {
+			maxBaseLength = 1
+		}
+		nextBase := base
+		if len(nextBase) > maxBaseLength {
+			nextBase = strings.Trim(nextBase[:maxBaseLength], "-")
+			if nextBase == "" {
+				nextBase = "post"
+			}
+		}
+		candidate := nextBase + suffix
+		if _, ok := seen[candidate]; !ok {
+			return candidate
+		}
+	}
+}
+
+func dropBlogLocaleSlugIndex(tableName string) error {
+	indexName := "idx_blog_locale_slug"
+	if !DB.Migrator().HasIndex(tableName, indexName) {
+		return nil
+	}
+
+	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
+		return DB.Exec(fmt.Sprintf("ALTER TABLE %s DROP INDEX %s", tableName, indexName)).Error
+	}
+	return DB.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %s", indexName)).Error
+}
+
+func tableHasColumn(tableName string, columnName string) (bool, error) {
+	columns, err := DB.Migrator().ColumnTypes(tableName)
+	if err != nil {
+		return false, err
+	}
+	for _, column := range columns {
+		if strings.EqualFold(column.Name(), columnName) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // migrateBlogImageFieldsToText migrates image payload columns away from varchar(512).
