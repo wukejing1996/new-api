@@ -19,8 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { type Table } from '@tanstack/react-table'
 import { Mail } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
+
 import { type User } from '../types'
 import { useUsers } from './users-provider'
 

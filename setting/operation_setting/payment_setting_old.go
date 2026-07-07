@@ -19,18 +19,18 @@ var USDExchangeRate = 7.3
 
 var PayMethods = []map[string]string{
 	{
-		"name":  "Alipay",
-		"color": "rgba(var(--semi-blue-5), 1)",
-		"type":  "alipay",
+		"name": "Alipay",
+		"icon": "SiAlipay",
+		"type": "alipay",
 	},
 	{
-		"name":  "WeChat",
-		"color": "rgba(var(--semi-green-5), 1)",
-		"type":  "wxpay",
+		"name": "WeChat",
+		"icon": "SiWechat",
+		"type": "wxpay",
 	},
 	{
 		"name":      "Custom 1",
-		"color":     "black",
+		"icon":      "LuCreditCard",
 		"type":      "custom1",
 		"min_topup": "50",
 	},

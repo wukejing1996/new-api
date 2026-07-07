@@ -17,7 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
+
 import { SectionPageLayout } from '@/components/layout'
+
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersEmailNotificationDialog } from './components/users-email-notification-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
@@ -31,11 +33,8 @@ function UsersContent() {
 
   return (
     <>
-      <SectionPageLayout>
+      <SectionPageLayout fixedContent>
         <SectionPageLayout.Title>{t('Users')}</SectionPageLayout.Title>
-        <SectionPageLayout.Description>
-          {t('Manage users and their permissions')}
-        </SectionPageLayout.Description>
         <SectionPageLayout.Actions>
           <UsersPrimaryButtons />
         </SectionPageLayout.Actions>
