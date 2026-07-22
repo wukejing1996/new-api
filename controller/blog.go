@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"strconv"
@@ -39,6 +40,65 @@ func GetPublishedBlogPost(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, post)
+}
+
+func GetPublishedBlogPostCover(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article cover not found"})
+		return
+	}
+
+	dataURL, err := model.GetPublishedBlogPostCover(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article cover not found"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+
+	contentType, imageData, err := decodeBlogCoverDataURL(dataURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Invalid article cover image"})
+		return
+	}
+
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, contentType, imageData)
+}
+
+func decodeBlogCoverDataURL(dataURL string) (string, []byte, error) {
+	header, payload, ok := strings.Cut(strings.TrimSpace(dataURL), ",")
+	if !ok || !strings.HasPrefix(header, "data:image/") {
+		return "", nil, errors.New("invalid image data URL")
+	}
+
+	metadata := strings.Split(strings.TrimPrefix(header, "data:"), ";")
+	if len(metadata) < 2 || metadata[0] == "" {
+		return "", nil, errors.New("invalid image metadata")
+	}
+	isBase64 := false
+	for _, value := range metadata[1:] {
+		if value == "base64" {
+			isBase64 = true
+			break
+		}
+	}
+	if !isBase64 {
+		return "", nil, errors.New("image is not base64 encoded")
+	}
+
+	imageData, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		imageData, err = base64.RawStdEncoding.DecodeString(payload)
+	}
+	if err != nil || len(imageData) == 0 {
+		return "", nil, errors.New("invalid base64 image")
+	}
+	return metadata[0], imageData, nil
 }
 
 func RecordPublishedBlogPostView(c *gin.Context) {

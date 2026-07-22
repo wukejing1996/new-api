@@ -54,13 +54,14 @@ type BlogPostListItem struct {
 
 	Slug string `json:"slug"`
 
-	Title       string `json:"title"`
-	Excerpt     string `json:"excerpt"`
-	CoverImage  string `json:"cover_image"`
-	Status      string `json:"status"`
-	PublishedAt int64  `json:"published_at"`
-	AuthorId    int    `json:"author_id"`
-	ViewCount   int64  `json:"view_count"`
+	Title         string `json:"title"`
+	Excerpt       string `json:"excerpt"`
+	CoverImage    string `json:"cover_image"`
+	HasCoverImage bool   `json:"has_cover_image" gorm:"->"`
+	Status        string `json:"status"`
+	PublishedAt   int64  `json:"published_at"`
+	AuthorId      int    `json:"author_id"`
+	ViewCount     int64  `json:"view_count"`
 
 	SEOTitle       string `json:"seo_title"`
 	SEODescription string `json:"seo_description"`
@@ -169,7 +170,7 @@ func GetPublishedBlogPosts(offset int, limit int, sort string) ([]BlogPostListIt
 	if limit <= 0 {
 		limit = common.ItemsPerPage
 	}
-	err := query.Select(blogPostListSelect()).
+	err := query.Select(blogPostListSelect(false)).
 		Offset(offset).
 		Limit(limit).
 		Order(blogPostOrderBy(sort)).
@@ -194,6 +195,20 @@ func GetPublishedBlogPost(slug string) (*BlogPost, error) {
 		return nil, err
 	}
 	return &post, nil
+}
+
+func GetPublishedBlogPostCover(id int) (string, error) {
+	var post BlogPost
+	if err := DB.Model(&BlogPost{}).
+		Select("cover_image").
+		Where("id = ? AND status = ?", id, BlogPostStatusPublished).
+		First(&post).Error; err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(post.CoverImage) == "" {
+		return "", gorm.ErrRecordNotFound
+	}
+	return post.CoverImage, nil
 }
 
 func IncrementPublishedBlogPostView(slug string) (int64, error) {
@@ -238,7 +253,7 @@ func AdminListBlogPosts(params AdminBlogPostQuery) ([]BlogPostListItem, int64, e
 	if limit <= 0 {
 		limit = common.ItemsPerPage
 	}
-	err := query.Select(blogPostListSelect()).
+	err := query.Select(blogPostListSelect(true)).
 		Offset(params.Offset).
 		Limit(limit).
 		Order("updated_at desc, id desc").
@@ -318,8 +333,12 @@ func IsBlogPostSlugConflict(err error) bool {
 	return strings.Contains(msg, "unique") || strings.Contains(msg, "duplicate") || strings.Contains(msg, "constraint")
 }
 
-func blogPostListSelect() []string {
-	return []string{"id", "slug", "title", "excerpt", "cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+func blogPostListSelect(includeCoverImage bool) []string {
+	fields := []string{"id", "slug", "title", "excerpt", "CASE WHEN cover_image IS NOT NULL AND cover_image <> '' THEN TRUE ELSE FALSE END AS has_cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+	if includeCoverImage {
+		fields = append(fields, "cover_image")
+	}
+	return fields
 }
 
 func blogPostOrderBy(sort string) string {

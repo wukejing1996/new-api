@@ -44,6 +44,7 @@ func SetApiRouter(router *gin.Engine) {
 		blogRoute := apiRouter.Group("/blog")
 		{
 			blogRoute.GET("/posts", controller.GetPublishedBlogPosts)
+			blogRoute.GET("/covers/:id", controller.GetPublishedBlogPostCover)
 			blogRoute.POST("/posts/:slug/view", controller.RecordPublishedBlogPostView)
 			blogRoute.GET("/posts/:slug", controller.GetPublishedBlogPost)
 			blogAdminRoute := blogRoute.Group("/admin")
