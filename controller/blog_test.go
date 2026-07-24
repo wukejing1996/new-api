@@ -61,3 +61,33 @@ func TestPublishedBlogListUsesSeparateCoverEndpoint(t *testing.T) {
 	require.Equal(t, "public, max-age=31536000, immutable", coverRecorder.Header().Get("Cache-Control"))
 	require.Equal(t, imageData, coverRecorder.Body.Bytes())
 }
+
+func TestBlogViewCountIsInitializedOnlyOnFirstPublish(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.BlogPost{}))
+
+	draft := model.BlogPost{Slug: "draft", Title: "Draft", ContentHTML: "<p>Body</p>", Status: model.BlogPostStatusDraft}
+	require.NoError(t, model.CreateBlogPost(&draft))
+	require.Zero(t, draft.ViewCount)
+
+	draft.Status = model.BlogPostStatusPublished
+	draft.PublishedAt = 1
+	require.NoError(t, model.UpdateBlogPost(&draft))
+	require.NoError(t, db.First(&draft, draft.Id).Error)
+	require.GreaterOrEqual(t, draft.ViewCount, int64(250))
+	require.LessOrEqual(t, draft.ViewCount, int64(400))
+
+	initialViewCount := draft.ViewCount
+	draft.Title = "Updated"
+	require.NoError(t, model.UpdateBlogPost(&draft))
+	require.NoError(t, db.First(&draft, draft.Id).Error)
+	require.Equal(t, initialViewCount, draft.ViewCount)
+
+	draft.Status = model.BlogPostStatusDraft
+	draft.PublishedAt = 0
+	require.NoError(t, model.UpdateBlogPost(&draft))
+	draft.Status = model.BlogPostStatusPublished
+	require.NoError(t, model.UpdateBlogPost(&draft))
+	require.NoError(t, db.First(&draft, draft.Id).Error)
+	require.Equal(t, initialViewCount, draft.ViewCount)
+}

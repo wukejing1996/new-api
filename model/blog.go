@@ -12,6 +12,8 @@ import (
 const (
 	BlogPostStatusDraft     = "draft"
 	BlogPostStatusPublished = "published"
+	blogInitialViewCountMin = 250
+	blogInitialViewCountMax = 400
 )
 
 var (
@@ -270,6 +272,9 @@ func GetBlogPostById(id int) (*BlogPost, error) {
 }
 
 func CreateBlogPost(post *BlogPost) error {
+	if post != nil && post.Status == BlogPostStatusPublished {
+		post.ViewCount = randomBlogInitialViewCount()
+	}
 	return DB.Create(post).Error
 }
 
@@ -292,6 +297,15 @@ func UpdateBlogPost(post *BlogPost) error {
 		"og_image":        post.OGImage,
 		"keywords":        post.Keywords,
 		"updated_at":      common.GetTimestamp(),
+	}
+	if post.Status == BlogPostStatusPublished {
+		var current BlogPost
+		if err := DB.Select("view_count").Where("id = ?", post.Id).First(&current).Error; err != nil {
+			return err
+		}
+		if current.ViewCount == 0 {
+			update["view_count"] = randomBlogInitialViewCount()
+		}
 	}
 	result := DB.Model(&BlogPost{}).Where("id = ?", post.Id).Updates(update)
 	if result.Error != nil {
@@ -318,11 +332,18 @@ func SetBlogPostPublished(id int, published bool) (*BlogPost, error) {
 		if post.PublishedAt == 0 {
 			post.PublishedAt = common.GetTimestamp()
 		}
+		if post.ViewCount == 0 {
+			post.ViewCount = randomBlogInitialViewCount()
+		}
 	}
 	if err := DB.Save(post).Error; err != nil {
 		return nil, err
 	}
 	return post, nil
+}
+
+func randomBlogInitialViewCount() int64 {
+	return int64(blogInitialViewCountMin + common.GetRandomInt(blogInitialViewCountMax-blogInitialViewCountMin+1))
 }
 
 func IsBlogPostSlugConflict(err error) bool {
