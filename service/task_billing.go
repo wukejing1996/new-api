@@ -19,10 +19,10 @@ import (
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
 func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	tokenName := c.GetString("token_name")
-	logContent := fmt.Sprintf("操作 %s", info.Action)
+	logContent := fmt.Sprintf("Action %s", info.Action)
 	// 支持任务仅按次计费
 	if common.StringsContains(constant.TaskPricePatches, info.OriginModelName) {
-		logContent = fmt.Sprintf("%s，按次计费", logContent)
+		logContent = fmt.Sprintf("%s, per-call billing", logContent)
 	} else {
 		if otherRatios := info.PriceData.OtherRatios(); len(otherRatios) > 0 {
 			var contents []string
@@ -32,7 +32,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 				}
 			}
 			if len(contents) > 0 {
-				logContent = fmt.Sprintf("%s, 计算参数：%s", logContent, strings.Join(contents, ", "))
+				logContent = fmt.Sprintf("%s, calculation parameters: %s", logContent, strings.Join(contents, ", "))
 			}
 		}
 	}
