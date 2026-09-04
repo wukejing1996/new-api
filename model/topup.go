@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -22,6 +23,7 @@ type TopUp struct {
 	CreateTime      int64   `json:"create_time"`
 	CompleteTime    int64   `json:"complete_time"`
 	Status          string  `json:"status"`
+	InviterRewarded bool    `json:"-" gorm:"column:inviter_rewarded"`
 }
 
 const (
@@ -237,8 +239,82 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 	}
 
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("Online top-up succeeded, quota: %v, payment amount: %.2f", logger.FormatQuota(int(quota)), topUp.Money), callerIp, topUp.PaymentMethod, PaymentMethodStripe)
+	RewardInviterForStripeTopUp(topUp.UserId, topUp.Id, topUp.Money)
 
 	return nil
+}
+
+func RewardInviterForStripeTopUp(userId int, topUpId int, paidAmount float64) {
+	ratio := common.InviterTopUpRewardRatio
+	if userId <= 0 || topUpId <= 0 || paidAmount <= 0 || math.IsNaN(paidAmount) || math.IsInf(paidAmount, 0) ||
+		ratio <= 0 || ratio > 1 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
+		return
+	}
+
+	var inviterId int
+	var rewardQuota int
+	var rewardAmount string
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := tx.Select("id, inviter_id").Where("id = ?", userId).First(&user).Error; err != nil {
+			return err
+		}
+		if user.InviterId <= 0 {
+			return nil
+		}
+		inviterId = user.InviterId
+
+		var topUp TopUp
+		if err := lockForUpdate(tx).
+			Where("id = ? AND user_id = ? AND payment_provider = ? AND status = ? AND inviter_rewarded = ?", topUpId, userId, PaymentProviderStripe, common.TopUpStatusSuccess, false).
+			First(&topUp).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+
+		if topUp.Money <= 0 || math.IsNaN(topUp.Money) || math.IsInf(topUp.Money, 0) ||
+			math.Abs(topUp.Money-paidAmount) > 0.005 {
+			return errors.New("stripe top-up payment amount mismatch")
+		}
+		if common.QuotaPerUnit <= 0 || math.IsNaN(common.QuotaPerUnit) || math.IsInf(common.QuotaPerUnit, 0) {
+			return errors.New("invalid quota per unit")
+		}
+		rewardDecimal := decimal.NewFromFloat(paidAmount).Mul(decimal.NewFromFloat(ratio))
+		rewardAmount = rewardDecimal.StringFixed(2)
+		rewardDecimal = rewardDecimal.Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+		var clamp *common.QuotaClamp
+		rewardQuota, clamp = common.QuotaFromDecimalChecked(rewardDecimal)
+		if clamp != nil {
+			return clamp
+		}
+
+		if rewardQuota > 0 {
+			updated := tx.Model(&User{}).
+				Where("id = ?", user.InviterId).
+				Update("quota", gorm.Expr("quota + ?", rewardQuota))
+			if updated.Error != nil {
+				return updated.Error
+			}
+			if updated.RowsAffected != 1 {
+				return errors.New("inviter not found")
+			}
+		}
+		if err := tx.Model(&TopUp{}).
+			Where("id = ? AND inviter_rewarded = ?", topUp.Id, false).
+			Update("inviter_rewarded", true).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		common.SysError(fmt.Sprintf("stripe inviter top-up reward failed: user_id=%d, error=%v", userId, err))
+		return
+	}
+	if rewardQuota > 0 {
+		RecordLog(inviterId, LogTypeTopup, fmt.Sprintf("Received an invitation reward of %s from a referred user's top-up (paid amount: %.2f)", rewardAmount, paidAmount))
+	}
 }
 
 // topUpQueryWindowSeconds 限制充值记录查询的时间窗口（秒）。

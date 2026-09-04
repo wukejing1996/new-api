@@ -135,6 +135,53 @@ func TestRechargeStripe_CreditsRequestedAmountAndKeepsDiscountedPaymentMoney(t *
 	assert.Equal(t, int(100*common.QuotaPerUnit), getUserQuotaForPaymentGuardTest(t, 102))
 }
 
+func TestRewardInviterForStripeTopUpUsesPaidAmountAndIsIdempotent(t *testing.T) {
+	truncateTables(t)
+
+	originalRatio := common.InviterTopUpRewardRatio
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		common.InviterTopUpRewardRatio = originalRatio
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+	common.InviterTopUpRewardRatio = 0.05
+	common.QuotaPerUnit = 500000
+
+	require.NoError(t, DB.Create(&User{Id: 201, Username: "inviter", AffCode: "reward-inviter", Status: common.UserStatusEnabled}).Error)
+	require.NoError(t, DB.Create(&User{Id: 202, Username: "invitee", AffCode: "reward-invitee", InviterId: 201, Status: common.UserStatusEnabled}).Error)
+	topUp := &TopUp{
+		UserId:          202,
+		Amount:          100,
+		Money:           97,
+		TradeNo:         "stripe-inviter-reward",
+		PaymentMethod:   PaymentMethodStripe,
+		PaymentProvider: PaymentProviderStripe,
+		Status:          common.TopUpStatusSuccess,
+		CompleteTime:    time.Now().Unix(),
+		InviterRewarded: false,
+	}
+	require.NoError(t, DB.Create(topUp).Error)
+
+	RewardInviterForStripeTopUp(202, topUp.Id, topUp.Money)
+	assert.Equal(t, 2425000, getUserQuotaForPaymentGuardTest(t, 201))
+	var rewardLog Log
+	require.NoError(t, DB.Where("user_id = ? AND type = ?", 201, LogTypeTopup).Order("id DESC").First(&rewardLog).Error)
+	assert.Contains(t, rewardLog.Content, "Received an invitation reward of 4.85")
+	assert.Contains(t, rewardLog.Content, "from a referred user's top-up")
+	assert.Contains(t, rewardLog.Content, "paid amount: 97.00")
+	assert.NotContains(t, rewardLog.Content, "quota")
+	assert.NotContains(t, rewardLog.Content, "Stripe")
+
+	RewardInviterForStripeTopUp(202, topUp.Id, topUp.Money)
+	assert.Equal(t, 2425000, getUserQuotaForPaymentGuardTest(t, 201))
+	var rewardLogCount int64
+	require.NoError(t, DB.Model(&Log{}).Where("user_id = ? AND type = ?", 201, LogTypeTopup).Count(&rewardLogCount).Error)
+	assert.Equal(t, int64(1), rewardLogCount)
+	var storedTopUp TopUp
+	require.NoError(t, DB.Where("trade_no = ?", "stripe-inviter-reward").First(&storedTopUp).Error)
+	assert.True(t, storedTopUp.InviterRewarded)
+}
+
 func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T) {
 	testCases := []struct {
 		name                    string
