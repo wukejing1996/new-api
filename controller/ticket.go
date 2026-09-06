@@ -46,6 +46,7 @@ type ticketImageResponse struct {
 type ticketResponse struct {
 	Id                    int                     `json:"id"`
 	UserId                int                     `json:"user_id"`
+	UserName              string                  `json:"user_name,omitempty"`
 	Subject               string                  `json:"subject"`
 	Category              string                  `json:"category"`
 	Priority              string                  `json:"priority"`
@@ -320,9 +321,11 @@ func getTicketFromParam(c *gin.Context) (*model.Ticket, error) {
 }
 
 func buildTicketResponse(ticket *model.Ticket, unreadUser bool) ticketResponse {
+	userName, _ := model.GetUsernameById(ticket.UserId, false)
 	response := ticketResponse{
 		Id:                    ticket.Id,
 		UserId:                ticket.UserId,
+		UserName:              userName,
 		Subject:               ticket.Subject,
 		Category:              ticket.Category,
 		Priority:              ticket.Priority,
