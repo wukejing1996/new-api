@@ -59,6 +59,25 @@ func SetApiRouter(router *gin.Engine) {
 				blogAdminRoute.POST("/posts/:id/unpublish", controller.AdminUnpublishBlogPost)
 			}
 		}
+		ticketRoute := apiRouter.Group("/ticket")
+		ticketRoute.Use(middleware.UserAuth())
+		{
+			ticketRoute.GET("", controller.ListUserTickets)
+			ticketRoute.POST("", middleware.CriticalRateLimit(), controller.CreateUserTicket)
+			ticketRoute.GET("/images/:id", controller.GetTicketImage)
+			ticketAdminRoute := ticketRoute.Group("/admin")
+			ticketAdminRoute.Use(middleware.AdminAuth())
+			{
+				ticketAdminRoute.GET("", controller.AdminListTickets)
+				ticketAdminRoute.GET("/counts", controller.AdminTicketCounts)
+				ticketAdminRoute.GET("/:id", controller.AdminGetTicket)
+				ticketAdminRoute.POST("/:id/messages", middleware.CriticalRateLimit(), controller.AdminReplyTicket)
+				ticketAdminRoute.PUT("/:id/status", controller.AdminUpdateTicketStatus)
+			}
+			ticketRoute.GET("/:id", controller.GetUserTicket)
+			ticketRoute.POST("/:id/messages", middleware.CriticalRateLimit(), controller.ReplyUserTicket)
+			ticketRoute.POST("/:id/close", controller.CloseUserTicket)
+		}
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.ResetPassword)
 		// OAuth routes - specific routes must come before :provider wildcard
 		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.GenerateOAuthCode)
