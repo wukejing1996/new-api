@@ -54,8 +54,8 @@ type ticketResponse struct {
 	LastMessageSenderType string                  `json:"last_message_sender_type"`
 	CreatedAt             int64                   `json:"created_at"`
 	UpdatedAt             int64                   `json:"updated_at"`
-	Unread                bool                    `json:"unread"`
-	Unreplied             bool                    `json:"unreplied"`
+	Unread                bool                    `json:"unread,omitempty"`
+	Unreplied             bool                    `json:"unreplied,omitempty"`
 	Messages              []ticketMessageResponse `json:"messages,omitempty"`
 }
 
@@ -71,10 +71,11 @@ type ticketStatusRequest struct {
 func ListUserTickets(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	tickets, total, err := model.ListTickets(model.TicketListQuery{
-		UserId: c.GetInt("id"),
-		Status: c.Query("status"),
-		Offset: pageInfo.GetStartIdx(),
-		Limit:  pageInfo.GetPageSize(),
+		UserId:  c.GetInt("id"),
+		Status:  c.Query("status"),
+		Keyword: strings.TrimSpace(c.Query("keyword")),
+		Offset:  pageInfo.GetStartIdx(),
+		Limit:   pageInfo.GetPageSize(),
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -184,7 +185,7 @@ func CloseUserTicket(c *gin.Context) {
 		return
 	}
 	ticket.Status = model.TicketStatusClosed
-	common.ApiSuccess(c, buildTicketResponse(ticket, false))
+	common.ApiSuccess(c, buildTicketResponse(ticket, true))
 }
 
 func AdminListTickets(c *gin.Context) {
@@ -231,7 +232,7 @@ func AdminGetTicket(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	response, err := loadTicketResponse(ticket, true)
+	response, err := loadTicketResponse(ticket, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -260,7 +261,7 @@ func AdminReplyTicket(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	response, err := loadTicketResponse(updatedTicket, true)
+	response, err := loadTicketResponse(updatedTicket, false)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -320,7 +321,7 @@ func getTicketFromParam(c *gin.Context) (*model.Ticket, error) {
 	return model.GetTicketById(id)
 }
 
-func buildTicketResponse(ticket *model.Ticket, unreadUser bool) ticketResponse {
+func buildTicketResponse(ticket *model.Ticket, viewerIsUser bool) ticketResponse {
 	userName, _ := model.GetUsernameById(ticket.UserId, false)
 	response := ticketResponse{
 		Id:                    ticket.Id,
@@ -336,13 +337,14 @@ func buildTicketResponse(ticket *model.Ticket, unreadUser bool) ticketResponse {
 		Unread:                ticket.LastMessageSenderType == model.TicketSenderUser && ticket.LastMessageId > ticket.AdminReadMessageId,
 		Unreplied:             ticket.LastMessageSenderType == model.TicketSenderUser,
 	}
-	if unreadUser {
-		response.Unread = ticket.LastMessageSenderType == model.TicketSenderAdmin && ticket.LastMessageId > ticket.UserReadMessageId
+	if viewerIsUser {
+		response.Unread = false
+		response.Unreplied = false
 	}
 	return response
 }
 
-func loadTicketResponse(ticket *model.Ticket, unreadUser bool) (*ticketResponse, error) {
+func loadTicketResponse(ticket *model.Ticket, viewerIsUser bool) (*ticketResponse, error) {
 	messages, err := model.GetTicketMessages(ticket.Id)
 	if err != nil {
 		return nil, err
@@ -355,7 +357,7 @@ func loadTicketResponse(ticket *model.Ticket, unreadUser bool) (*ticketResponse,
 	if err != nil {
 		return nil, err
 	}
-	response := buildTicketResponse(ticket, unreadUser)
+	response := buildTicketResponse(ticket, viewerIsUser)
 	response.Messages = make([]ticketMessageResponse, 0, len(messages))
 	for _, message := range messages {
 		images := make([]ticketImageResponse, 0, len(imagesByMessage[message.Id]))
