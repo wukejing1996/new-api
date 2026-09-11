@@ -345,6 +345,7 @@ func SearchUsers(c *gin.Context) {
 
 func BroadcastEmail(c *gin.Context) {
 	var req service.EmailBroadcastRequest
+	var err error
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -357,10 +358,19 @@ func BroadcastEmail(c *gin.Context) {
 		return
 	}
 
-	result, err := service.SendEmailBroadcast(req)
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	var result service.EmailBroadcastResult
+	if req.DryRun {
+		result, err = service.SendEmailBroadcast(req)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else {
+		result, err = service.EnqueueEmailBroadcast(req)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 
 	adminInfo := map[string]interface{}{
@@ -372,10 +382,12 @@ func BroadcastEmail(c *gin.Context) {
 		"sent":           result.Sent,
 		"skipped":        result.Skipped,
 		"failed":         result.Failed,
+		"task_id":        result.TaskID,
+		"queued":         result.Queued,
 	}
 	if !req.DryRun {
 		model.RecordLogWithAdminInfo(c.GetInt("id"), model.LogTypeManage,
-			fmt.Sprintf("Admin sent email notification: %s", req.Subject), adminInfo)
+			fmt.Sprintf("Admin queued email notification: %s", req.Subject), adminInfo)
 	}
 
 	common.ApiSuccess(c, result)
