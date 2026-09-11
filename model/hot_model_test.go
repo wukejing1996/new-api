@@ -23,10 +23,11 @@ func TestHotModelCatalogUsesChannelModelsAndPreservesDates(t *testing.T) {
 	var metadataCount int64
 	require.NoError(t, DB.Model(&Model{}).Count(&metadataCount).Error)
 	assert.Zero(t, metadataCount)
-	require.NoError(t, SetHotModel("old-model", true))
+	createdTime := int64(300)
+	require.NoError(t, SetHotModel("old-model", true, &createdTime))
 	rows, err := GetHotModels()
 	require.NoError(t, err)
-	assert.Equal(t, []HotModel{{ModelName: "old-model", IsHot: true, CreatedTime: 100}, {ModelName: "vendor/new-model", CreatedTime: 200}}, rows)
+	assert.Equal(t, []HotModel{{ModelName: "old-model", IsHot: true, CreatedTime: 300}, {ModelName: "vendor/new-model", CreatedTime: 200}}, rows)
 
 	channel.Models += ",newly-added"
 	require.NoError(t, channel.UpdateAbilities(nil))
@@ -35,7 +36,7 @@ func TestHotModelCatalogUsesChannelModelsAndPreservesDates(t *testing.T) {
 	assert.Positive(t, added.CreatedTime)
 	var existing HotModel
 	require.NoError(t, DB.First(&existing, "model_name = ?", "old-model").Error)
-	assert.Equal(t, int64(100), existing.CreatedTime)
+	assert.Equal(t, int64(300), existing.CreatedTime)
 	assert.True(t, existing.IsHot)
 
 	pricing := GetPricing()
@@ -44,15 +45,15 @@ func TestHotModelCatalogUsesChannelModelsAndPreservesDates(t *testing.T) {
 		if row.ModelName == "old-model" {
 			found = true
 			assert.True(t, row.IsHot)
-			assert.Equal(t, int64(100), row.CreatedTime)
+			assert.Equal(t, int64(300), row.CreatedTime)
 		}
 	}
 	assert.True(t, found)
-	require.NoError(t, SetHotModel("old-model", false))
+	require.NoError(t, SetHotModel("old-model", false, nil))
 	require.NoError(t, DB.First(&existing, "model_name = ?", "old-model").Error)
 	assert.False(t, existing.IsHot)
-	assert.Equal(t, int64(100), existing.CreatedTime)
-	assert.ErrorIs(t, SetHotModel("price-only-model", true), ErrCatalogModelUnavailable)
+	assert.Equal(t, int64(300), existing.CreatedTime)
+	assert.ErrorIs(t, SetHotModel("price-only-model", true, nil), ErrCatalogModelUnavailable)
 	require.NoError(t, UpdateAbilityStatus(801, false))
 	require.NoError(t, UpdateAbilityStatus(802, false))
 	rows, err = GetHotModels()
@@ -60,7 +61,7 @@ func TestHotModelCatalogUsesChannelModelsAndPreservesDates(t *testing.T) {
 	assert.Empty(t, rows)
 	require.NoError(t, UpdateAbilityStatus(802, true))
 	require.NoError(t, DB.First(&existing, "model_name = ?", "old-model").Error)
-	assert.Equal(t, int64(100), existing.CreatedTime)
+	assert.Equal(t, int64(300), existing.CreatedTime)
 }
 
 func TestHotModelMigrationPreservesLegacyFlagAndUnknownHistoricalDate(t *testing.T) {
@@ -79,7 +80,7 @@ func TestHotModelMigrationPreservesLegacyFlagAndUnknownHistoricalDate(t *testing
 	rows, err := GetHotModels()
 	require.NoError(t, err)
 	assert.Equal(t, []HotModel{{ModelName: "legacy", IsHot: true}, {ModelName: "without-metadata"}}, rows)
-	require.NoError(t, SetHotModel("legacy", false))
+	require.NoError(t, SetHotModel("legacy", false, nil))
 	require.NoError(t, migrateHotModels())
 	var row HotModel
 	require.NoError(t, DB.First(&row, "model_name = ?", "legacy").Error)

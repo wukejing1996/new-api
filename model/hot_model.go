@@ -96,7 +96,7 @@ func GetHotModels() ([]HotModel, error) {
 
 var ErrCatalogModelUnavailable = errors.New("model is not available in enabled channels")
 
-func SetHotModel(name string, isHot bool) error {
+func SetHotModel(name string, isHot bool, createdTime *int64) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(&Ability{}).Where("model = ? AND enabled = ?", name, true).Count(&count).Error; err != nil {
@@ -106,9 +106,16 @@ func SetHotModel(name string, isHot bool) error {
 			return ErrCatalogModelUnavailable
 		}
 		row := HotModel{ModelName: name, IsHot: isHot}
+		if createdTime != nil {
+			row.CreatedTime = *createdTime
+		}
+		updates := []string{"is_hot"}
+		if createdTime != nil {
+			updates = append(updates, "created_time")
+		}
 		return tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "model_name"}},
-			DoUpdates: clause.AssignmentColumns([]string{"is_hot"}),
+			DoUpdates: clause.AssignmentColumns(updates),
 		}).Create(&row).Error
 	})
 }

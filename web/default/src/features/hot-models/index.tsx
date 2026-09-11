@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Flame, RefreshCw, Search } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -42,6 +42,10 @@ type HotModel = {
   created_time: number
 }
 
+type HotModelUpdate = Pick<HotModel, 'model_name' | 'is_hot'> & {
+  created_time?: number
+}
+
 const queryKey = ['hot-models'] as const
 const pageSize = 50
 
@@ -57,19 +61,21 @@ export function HotModels() {
       const response = await api.get<{ success: boolean; data: HotModel[] }>(
         '/api/hot-models/'
       )
-      if (!response.data.success)
+      if (!response.data.success) {
         throw new Error(t('Failed to load hot models. Please retry.'))
+      }
       return response.data.data
     },
   })
   const mutation = useMutation({
-    mutationFn: async (row: Pick<HotModel, 'model_name' | 'is_hot'>) => {
+    mutationFn: async (row: HotModelUpdate) => {
       const response = await api.put<{ success: boolean; message?: string }>(
         '/api/hot-models/',
         row
       )
-      if (!response.data.success)
+      if (!response.data.success) {
         throw new Error(response.data.message || t('Request failed'))
+      }
     },
     onSuccess: async () => {
       toast.success(t('Hot model setting saved'))
@@ -179,9 +185,18 @@ export function HotModels() {
                     )}
                   </TableCell>
                   <TableCell className='text-muted-foreground text-sm'>
-                    {row.created_time > 0
-                      ? formatTimestampToDate(row.created_time)
-                      : t('Unknown')}
+                    <CatalogTimeEditor
+                      timestamp={row.created_time}
+                      disabled={mutation.isPending}
+                      unknownLabel={t('Unknown')}
+                      onSave={(createdTime) =>
+                        mutation.mutate({
+                          model_name: row.model_name,
+                          is_hot: row.is_hot,
+                          created_time: createdTime,
+                        })
+                      }
+                    />
                   </TableCell>
                   <TableCell className='text-right'>
                     <Switch
@@ -244,4 +259,70 @@ export function HotModels() {
       </div>
     </section>
   )
+}
+
+function CatalogTimeEditor(props: {
+  timestamp: number
+  disabled: boolean
+  unknownLabel: string
+  onSave: (timestamp: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(() => timestampToInput(props.timestamp))
+
+  useEffect(() => {
+    setDraft(timestampToInput(props.timestamp))
+  }, [props.timestamp])
+
+  if (!editing) {
+    return (
+      <button
+        type='button'
+        className='hover:text-foreground inline-flex items-center border-b border-dashed border-current/40 py-1 tabular-nums transition-colors'
+        disabled={props.disabled}
+        onClick={() => setEditing(true)}
+        title={props.unknownLabel}
+      >
+        {props.timestamp > 0
+          ? formatTimestampToDate(props.timestamp)
+          : props.unknownLabel}
+      </button>
+    )
+  }
+
+  return (
+    <Input
+      autoFocus
+      type='datetime-local'
+      className='h-8 w-[12.5rem] text-xs tabular-nums'
+      value={draft}
+      disabled={props.disabled}
+      aria-label={props.unknownLabel}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        const nextTimestamp = parseTimestampInput(draft)
+        setEditing(false)
+        if (nextTimestamp !== props.timestamp) props.onSave(nextTimestamp)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setDraft(timestampToInput(props.timestamp))
+          setEditing(false)
+        }
+      }}
+    />
+  )
+}
+
+function timestampToInput(timestamp: number) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp * 1000)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function parseTimestampInput(value: string) {
+  if (!value) return 0
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : 0
 }

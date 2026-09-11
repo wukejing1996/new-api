@@ -29,6 +29,8 @@ func TestHotModelAPIValidatesAndSavesExplicitFalse(t *testing.T) {
 		{`{"model_name":"","is_hot":true}`, http.StatusBadRequest},
 		{`{"model_name":"missing","is_hot":true}`, http.StatusNotFound},
 		{`{"model_name":"vendor/model","is_hot":true}`, http.StatusOK},
+		{`{"model_name":"vendor/model","is_hot":true,"created_time":1700000000}`, http.StatusOK},
+		{`{"model_name":"vendor/model","is_hot":true,"created_time":-1}`, http.StatusBadRequest},
 		{`{"model_name":"vendor/model","is_hot":false}`, http.StatusOK},
 	} {
 		t.Run(test.body, func(t *testing.T) {
@@ -47,5 +49,5 @@ func TestHotModelAPIValidatesAndSavesExplicitFalse(t *testing.T) {
 	}
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
 	assert.True(t, result.Success)
-	assert.Equal(t, []model.HotModel{{ModelName: "vendor/model"}}, result.Data)
+	assert.Equal(t, []model.HotModel{{ModelName: "vendor/model", CreatedTime: 1700000000}}, result.Data)
 }
