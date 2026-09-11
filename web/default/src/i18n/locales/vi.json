@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "Quản lý mô hình nổi bật",
+    "Hot Model": "Mô hình nổi bật",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "Mô hình lấy từ các kênh đang bật. Mô hình nổi bật hiển thị trước. Thay đổi được lưu tự động.",
+    "Hot model setting saved": "Đã lưu trạng thái nổi bật",
+    "Search model name": "Tìm tên mô hình",
+    "Hot models only": "Chỉ mô hình nổi bật",
+    "Failed to load hot models. Please retry.": "Không tải được mô hình. Vui lòng thử lại.",
+    "Catalog entry time": "Thời điểm thêm",
+    "Mark {{model}} as hot": "Đánh dấu {{model}} là nổi bật",
+    "No matching enabled models": "Không có mô hình đang bật phù hợp",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "Không rõ thời điểm thêm trước đây. Mô hình mới ghi nhận thời điểm lần đầu thêm vào kênh; chỉnh sửa hoặc đánh dấu nổi bật không thay đổi thời điểm này.",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

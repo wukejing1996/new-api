@@ -374,8 +374,6 @@ func updatePricing() {
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
-			pricing.IsHot = meta.IsHot
-			pricing.CreatedTime = meta.CreatedTime
 		}
 		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
 		if findPrice {
@@ -412,6 +410,8 @@ func updatePricing() {
 		}
 		pricingMap = append(pricingMap, pricing)
 	}
+
+	applyHotModelPreferences(pricingMap)
 
 	// 防止大更新后数据不通用
 	if len(pricingMap) > 0 {

@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "熱門模型管理",
+    "Hot Model": "熱門模型",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "模型來自已啟用的渠道。熱門模型優先顯示，切換後自動儲存。",
+    "Hot model setting saved": "熱門設定已儲存",
+    "Search model name": "搜尋模型名稱",
+    "Hot models only": "只看熱門",
+    "Failed to load hot models. Please retry.": "熱門模型載入失敗，請重試。",
+    "Catalog entry time": "收錄時間",
+    "Mark {{model}} as hot": "將 {{model}} 標記為熱門",
+    "No matching enabled models": "沒有符合的已啟用模型",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "歷史收錄時間未知。新模型首次加入渠道時記錄時間，編輯或標記熱門不會改變該時間。",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

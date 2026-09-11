@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "Gestion des modèles populaires",
+    "Hot Model": "Modèle populaire",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "Les modèles proviennent des canaux activés. Les modèles populaires apparaissent en premier. Les modifications sont enregistrées automatiquement.",
+    "Hot model setting saved": "Statut populaire enregistré",
+    "Search model name": "Rechercher un modèle",
+    "Hot models only": "Modèles populaires uniquement",
+    "Failed to load hot models. Please retry.": "Échec du chargement. Veuillez réessayer.",
+    "Catalog entry time": "Date d’ajout au catalogue",
+    "Mark {{model}} as hot": "Marquer {{model}} comme populaire",
+    "No matching enabled models": "Aucun modèle activé correspondant",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "Les dates historiques sont inconnues. La date est enregistrée au premier ajout à un canal ; les modifications et le statut populaire ne la changent pas.",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

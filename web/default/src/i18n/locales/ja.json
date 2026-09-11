@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "人気モデル管理",
+    "Hot Model": "人気モデル",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "有効なチャネルのモデルを表示します。人気モデルを優先表示し、変更は自動保存されます。",
+    "Hot model setting saved": "人気設定を保存しました",
+    "Search model name": "モデル名を検索",
+    "Hot models only": "人気モデルのみ",
+    "Failed to load hot models. Please retry.": "読み込みに失敗しました。再試行してください。",
+    "Catalog entry time": "登録日時",
+    "Mark {{model}} as hot": "{{model}} を人気モデルに設定",
+    "No matching enabled models": "一致する有効なモデルがありません",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "過去の登録日時は不明です。新しいモデルは初めてチャネルに追加した日時を記録し、編集や人気設定では変更しません。",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

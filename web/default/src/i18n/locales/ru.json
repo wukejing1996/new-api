@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "Управление популярными моделями",
+    "Hot Model": "Популярная модель",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "Модели из включённых каналов. Популярные модели показываются первыми. Изменения сохраняются автоматически.",
+    "Hot model setting saved": "Настройка популярности сохранена",
+    "Search model name": "Поиск по названию модели",
+    "Hot models only": "Только популярные",
+    "Failed to load hot models. Please retry.": "Не удалось загрузить модели. Повторите попытку.",
+    "Catalog entry time": "Дата добавления",
+    "Mark {{model}} as hot": "Отметить {{model}} как популярную",
+    "No matching enabled models": "Нет подходящих включённых моделей",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "Исторические даты неизвестны. Дата фиксируется при первом добавлении в канал и не меняется при редактировании или отметке популярности.",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

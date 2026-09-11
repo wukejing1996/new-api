@@ -1,5 +1,16 @@
 {
   "translation": {
+    "Hot Model Management": "Hot Model Management",
+    "Hot Model": "Hot Model",
+    "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.": "Models come from enabled channels. Hot models appear first in the public catalog. Changes save automatically.",
+    "Hot model setting saved": "Hot model setting saved",
+    "Search model name": "Search model name",
+    "Hot models only": "Hot models only",
+    "Failed to load hot models. Please retry.": "Failed to load hot models. Please retry.",
+    "Catalog entry time": "Catalog entry time",
+    "Mark {{model}} as hot": "Mark {{model}} as hot",
+    "No matching enabled models": "No matching enabled models",
+    "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.": "Historical entry times are unknown. New models are dated when first added to a channel; editing or marking hot keeps that date.",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

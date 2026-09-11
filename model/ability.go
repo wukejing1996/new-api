@@ -231,6 +231,9 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 			return err
 		}
 	}
+	if err := recordCatalogModels(useDB, models_); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -300,6 +303,13 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 				return err
 			}
 		}
+	}
+
+	if err := recordCatalogModels(tx, models_); err != nil {
+		if isNewTx {
+			tx.Rollback()
+		}
+		return err
 	}
 
 	// 如果是新创建的事务，需要提交
