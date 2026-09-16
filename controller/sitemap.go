@@ -24,6 +24,7 @@ var sitemapLocaleSlugs = map[string]string{
 var sitemapStaticPaths = []string{
 	"",
 	"/models",
+	"/tools/token-calculator",
 	"/docs",
 	"/docs/how-to-use",
 	"/about",
