@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
 	"github.com/stripe/stripe-go/v81/webhook"
@@ -56,10 +57,17 @@ func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getStripeMinTopup())})
 		return
 	}
+	if req.Amount > 10000 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值数量不能大于 10000"})
+		return
+	}
 	id := c.GetInt("id")
 	group, err := model.GetUserGroup(id, true)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		return
+	}
+	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount)) {
 		return
 	}
 	payMoney := getStripePayMoney(float64(req.Amount), group)
@@ -99,7 +107,14 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	id := c.GetInt("id")
-	user, _ := model.GetUserById(id, false)
+	user, err := model.GetUserById(id, false)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "User not found"})
+		return
+	}
+	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount)) {
+		return
+	}
 	payMoney := getStripePayMoney(float64(req.Amount), user.Group)
 	stripeQuantity, err := getStripeCheckoutQuantity(payMoney)
 	if err != nil {
@@ -120,7 +135,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	amount := req.Amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = int64(float64(req.Amount) / common.QuotaPerUnit)
+		amount = decimal.NewFromInt(req.Amount).Div(decimal.NewFromFloat(common.QuotaPerUnit)).IntPart()
 		if amount < 1 {
 			amount = 1
 		}
@@ -224,6 +239,9 @@ func RetryStripePay(c *gin.Context) {
 	user, err := model.GetUserById(userId, false)
 	if err != nil || user == nil {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "user not found"})
+		return
+	}
+	if rejectInvalidCreditedQuota(c, userId, decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit))) {
 		return
 	}
 	stripeQuantity, err := getStripeCheckoutQuantity(topUp.Money)
@@ -470,7 +488,7 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 
 	// Use custom URLs if provided, otherwise use defaults
 	if successURL == "" {
-		successURL = paymentReturnPath("/console/log")
+		successURL = paymentReturnPath("/usage-logs")
 	}
 
 	params := &stripe.CheckoutSessionParams{
@@ -511,6 +529,18 @@ func GetChargedAmount(count float64, user model.User) float64 {
 	}
 
 	return count * topUpGroupRatio
+}
+
+// Stripe discounts affect the payment, not the nominal units credited.
+func getStripeCreditedQuota(amount int64) decimal.Decimal {
+	units := decimal.NewFromInt(amount)
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		units = units.Div(decimal.NewFromFloat(common.QuotaPerUnit)).Truncate(0)
+		if units.LessThan(decimal.NewFromInt(1)) {
+			units = decimal.NewFromInt(1)
+		}
+	}
+	return units.Mul(decimal.NewFromFloat(common.QuotaPerUnit))
 }
 
 func getStripePayMoney(amount float64, group string) float64 {

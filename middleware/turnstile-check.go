@@ -1,12 +1,10 @@
 package middleware
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,66 +14,58 @@ type turnstileCheckResponse struct {
 
 func TurnstileCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if common.TurnstileCheckEnabled {
-			session := sessions.Default(c)
-			turnstileChecked := session.Get("turnstile")
-			if turnstileChecked != nil {
-				c.Next()
-				return
-			}
-			response := c.Query("turnstile")
-			if response == "" {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile token is required",
-				})
-				c.Abort()
-				return
-			}
-			rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
-				"secret":   {common.TurnstileSecretKey},
-				"response": {response},
-				"remoteip": {c.ClientIP()},
-			})
-			if err != nil {
-				common.SysLog(err.Error())
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
-				c.Abort()
-				return
-			}
-			defer rawRes.Body.Close()
-			var res turnstileCheckResponse
-			err = json.NewDecoder(rawRes.Body).Decode(&res)
-			if err != nil {
-				common.SysLog(err.Error())
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": err.Error(),
-				})
-				c.Abort()
-				return
-			}
-			if !res.Success {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Turnstile verification failed. Please refresh and try again.",
-				})
-				c.Abort()
-				return
-			}
-			session.Set("turnstile", true)
-			err = session.Save()
-			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"message": "Failed to save session. Please try again.",
-					"success": false,
-				})
-				return
-			}
+		if VerifyTurnstile(c) {
+			c.Next()
 		}
-		c.Next()
 	}
+}
+
+// VerifyTurnstile validates the challenge without advancing the handler chain.
+func VerifyTurnstile(c *gin.Context) bool {
+	if common.TurnstileCheckEnabled {
+		response := c.Query("turnstile")
+		if response == "" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "Turnstile token is required",
+			})
+			c.Abort()
+			return false
+		}
+		rawRes, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", url.Values{
+			"secret":   {common.TurnstileSecretKey},
+			"response": {response},
+			"remoteip": {c.ClientIP()},
+		})
+		if err != nil {
+			common.SysLog(err.Error())
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			c.Abort()
+			return false
+		}
+		defer rawRes.Body.Close()
+		var res turnstileCheckResponse
+		err = common.DecodeJson(rawRes.Body, &res)
+		if err != nil {
+			common.SysLog(err.Error())
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			c.Abort()
+			return false
+		}
+		if !res.Success {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "Turnstile verification failed. Please refresh and try again.",
+			})
+			c.Abort()
+			return false
+		}
+	}
+	return true
 }
