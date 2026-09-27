@@ -103,8 +103,8 @@ services:
       options:
         max-size: "100m"
         max-file: "15"
-#    ports:
-#      - "5432:5432"  # Uncomment if you need to access PostgreSQL from outside Docker
+    ports:
+      - "5432:5432"  # Uncomment if you need to access PostgreSQL from outside Docker
 
 #  mysql:
 #    image: mysql:8.2
