@@ -859,7 +859,6 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 
 	return nil
 }
-}
 
 // GetTopUpByTxHash 根据交易哈希查询订单
 func GetTopUpByTxHash(txHash string) *TopUp {
@@ -963,12 +962,12 @@ func RechargeUsdt(tradeNo string, txHash string) error {
 // GetPendingUsdtOrders 获取所有pending状态的USDT订单
 func GetPendingUsdtOrders() []*TopUp {
 	var orders []*TopUp
-	err := DB.Where("status = ? AND payment_method = ? AND expire_time > ?", 
-		common.TopUpStatusPending, 
-		PaymentMethodUsdt, 
+	err := DB.Where("status = ? AND payment_method = ? AND expire_time > ?",
+		common.TopUpStatusPending,
+		PaymentMethodUsdt,
 		time.Now().Unix()).Find(&orders).Error
 	if err != nil {
-		logger.SysError("failed to get pending USDT orders: " + err.Error())
+		common.SysError("failed to get pending USDT orders: " + err.Error())
 		return nil
 	}
 	return orders

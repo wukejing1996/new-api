@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 )
@@ -17,12 +16,12 @@ var monitorCancel context.CancelFunc
 // StartUsdtOrderMonitor 启动USDT订单监控定时任务
 func StartUsdtOrderMonitor() {
 	if !setting.IsUsdtTopUpEnabled() {
-		logger.SysLog("USDT payment not enabled, monitor not started")
+		common.SysLog("USDT payment not enabled, monitor not started")
 		return
 	}
 
 	if monitorCancel != nil {
-		logger.SysWarn("USDT monitor already running")
+		common.SysLog("USDT monitor already running")
 		return
 	}
 
@@ -41,13 +40,13 @@ func StartUsdtOrderMonitor() {
 				checkPendingUsdtOrders(monitorCtx)
 			case <-monitorCtx.Done():
 				ticker.Stop()
-				logger.SysLog("USDT order monitor stopped")
+				common.SysLog("USDT order monitor stopped")
 				return
 			}
 		}
 	}()
 
-	logger.SysLog("USDT order monitor started")
+	common.SysLog("USDT order monitor started")
 }
 
 // StopUsdtOrderMonitor 停止USDT订单监控
@@ -61,7 +60,7 @@ func StopUsdtOrderMonitor() {
 func checkPendingUsdtOrders(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.SysError(fmt.Sprintf("USDT monitor panic: %v", r))
+			common.SysError(fmt.Sprintf("USDT monitor panic: %v", r))
 		}
 	}()
 
@@ -73,7 +72,7 @@ func checkPendingUsdtOrders(ctx context.Context) {
 		return
 	}
 
-	logger.SysLog(fmt.Sprintf("USDT monitor: checking %d pending orders", len(orders)))
+	common.SysLog(fmt.Sprintf("USDT monitor: checking %d pending orders", len(orders)))
 
 	expiredCount := 0
 	processedCount := 0
@@ -89,9 +88,9 @@ func checkPendingUsdtOrders(ctx context.Context) {
 		if now > order.ExpireTime {
 			err := model.ExpireUsdtOrder(order.Id)
 			if err != nil {
-				logger.SysError(fmt.Sprintf("USDT monitor: failed to expire order %s: %s", order.TradeNo, err.Error()))
+				common.SysError(fmt.Sprintf("USDT monitor: failed to expire order %s: %s", order.TradeNo, err.Error()))
 			} else {
-				logger.SysLog(fmt.Sprintf("USDT monitor: expired order %s", order.TradeNo))
+				common.SysLog(fmt.Sprintf("USDT monitor: expired order %s", order.TradeNo))
 				expiredCount++
 			}
 			continue
@@ -105,7 +104,7 @@ func checkPendingUsdtOrders(ctx context.Context) {
 		)
 
 		if err != nil {
-			logger.SysError(fmt.Sprintf("USDT monitor: failed to query blockchain for order %s: %s", order.TradeNo, err.Error()))
+			common.SysError(fmt.Sprintf("USDT monitor: failed to query blockchain for order %s: %s", order.TradeNo, err.Error()))
 			continue
 		}
 
@@ -117,22 +116,22 @@ func checkPendingUsdtOrders(ctx context.Context) {
 		// 原子性认领订单（数据库层面已检查 TxHash 唯一性）
 		success := model.ClaimOrderWithTxHash(order.Id, tx.TransactionID)
 		if !success {
-			logger.SysWarn(fmt.Sprintf("USDT monitor: failed to claim order %s (already processed or tx_hash already used), tx_hash=%s", order.TradeNo, tx.TransactionID))
+			common.SysLog(fmt.Sprintf("USDT monitor: failed to claim order %s (already processed or tx_hash already used), tx_hash=%s", order.TradeNo, tx.TransactionID))
 			continue
 		}
 
 		// 执行充值
 		err = model.RechargeUsdt(order.TradeNo, tx.TransactionID)
 		if err != nil {
-			logger.SysError(fmt.Sprintf("USDT monitor: failed to recharge order %s, tx_hash=%s, error=%s", order.TradeNo, tx.TransactionID, err.Error()))
+			common.SysError(fmt.Sprintf("USDT monitor: failed to recharge order %s, tx_hash=%s, error=%s", order.TradeNo, tx.TransactionID, err.Error()))
 			continue
 		}
 
-		logger.SysLog(fmt.Sprintf("USDT monitor: successfully processed order %s, amount=%.3f, tx_hash=%s", order.TradeNo, order.Money, tx.TransactionID))
+		common.SysLog(fmt.Sprintf("USDT monitor: successfully processed order %s, amount=%.3f, tx_hash=%s", order.TradeNo, order.Money, tx.TransactionID))
 		processedCount++
 	}
 
 	if expiredCount > 0 || processedCount > 0 {
-		logger.SysLog(fmt.Sprintf("USDT monitor: processed=%d, expired=%d", processedCount, expiredCount))
+		common.SysLog(fmt.Sprintf("USDT monitor: processed=%d, expired=%d", processedCount, expiredCount))
 	}
 }
