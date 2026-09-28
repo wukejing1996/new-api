@@ -98,6 +98,13 @@ func InitOptionMap() {
 	common.OptionMap["StripePriceId"] = setting.StripePriceId
 	common.OptionMap["StripeUnitPrice"] = strconv.FormatFloat(setting.StripeUnitPrice, 'f', -1, 64)
 	common.OptionMap["StripePromotionCodesEnabled"] = strconv.FormatBool(setting.StripePromotionCodesEnabled)
+	common.OptionMap["UsdtEnabled"] = strconv.FormatBool(setting.UsdtEnabled)
+	common.OptionMap["UsdtMinTopUp"] = strconv.Itoa(setting.UsdtMinTopUp)
+	common.OptionMap["UsdtReceiveAddress"] = setting.UsdtReceiveAddress
+	common.OptionMap["UsdtTrongridApiKey"] = setting.UsdtTrongridApiKey
+	common.OptionMap["UsdtNetwork"] = setting.UsdtNetwork
+	common.OptionMap["UsdtCheckInterval"] = strconv.Itoa(setting.UsdtCheckInterval)
+	common.OptionMap["UsdtOrderExpireTime"] = strconv.Itoa(setting.UsdtOrderExpireTime)
 	common.OptionMap["CreemApiKey"] = setting.CreemApiKey
 	common.OptionMap["CreemProducts"] = setting.CreemProducts
 	common.OptionMap["CreemTestMode"] = strconv.FormatBool(setting.CreemTestMode)
@@ -519,6 +526,20 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StripeMinTopUp, _ = strconv.Atoi(value)
 	case "StripePromotionCodesEnabled":
 		setting.StripePromotionCodesEnabled = value == "true"
+	case "UsdtEnabled":
+		setting.UsdtEnabled = value == "true"
+	case "UsdtMinTopUp":
+		setting.UsdtMinTopUp, _ = strconv.Atoi(value)
+	case "UsdtReceiveAddress":
+		setting.UsdtReceiveAddress = value
+	case "UsdtTrongridApiKey":
+		setting.UsdtTrongridApiKey = value
+	case "UsdtNetwork":
+		setting.UsdtNetwork = value
+	case "UsdtCheckInterval":
+		setting.UsdtCheckInterval, _ = strconv.Atoi(value)
+	case "UsdtOrderExpireTime":
+		setting.UsdtOrderExpireTime, _ = strconv.Atoi(value)
 	case "CreemApiKey":
 		setting.CreemApiKey = value
 	case "CreemProducts":
