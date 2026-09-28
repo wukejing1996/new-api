@@ -25,6 +25,8 @@ type TopUp struct {
 	CompleteTime    int64   `json:"complete_time"`
 	Status          string  `json:"status"`
 	InviterRewarded bool    `json:"-" gorm:"column:inviter_rewarded"`
+	TxHash          string  `json:"tx_hash" gorm:"type:varchar(255);index;default:''"`
+	ExpireTime      int64   `json:"expire_time" gorm:"default:0"`
 }
 
 const (
@@ -33,6 +35,7 @@ const (
 	PaymentMethodWaffo        = "waffo"
 	PaymentMethodWaffoPancake = "waffo_pancake"
 	PaymentMethodBalance      = "balance"
+	PaymentMethodUsdt         = "usdt"
 )
 
 const (
@@ -42,6 +45,7 @@ const (
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
 	PaymentProviderBalance      = "balance"
+	PaymentProviderUsdt         = "usdt"
 )
 
 var (
@@ -853,4 +857,119 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	}
 
 	return nil
+}
+}
+
+// GetTopUpByTxHash 根据交易哈希查询订单
+func GetTopUpByTxHash(txHash string) *TopUp {
+	var topUp TopUp
+	err := DB.Where("tx_hash = ?", txHash).First(&topUp).Error
+	if err != nil {
+		return nil
+	}
+	return &topUp
+}
+
+// IsTxHashUsed 检查交易哈希是否已被使用
+func IsTxHashUsed(txHash string) bool {
+	var count int64
+	DB.Model(&TopUp{}).Where("tx_hash = ? AND tx_hash != ''", txHash).Count(&count)
+	return count > 0
+}
+
+// GetPendingOrdersByAmount 获取指定金额的pending订单
+func GetPendingOrdersByAmount(amount float64, createTimeAfter int64) []*TopUp {
+	var topUps []*TopUp
+	DB.Where("money = ? AND status = ? AND create_time > ?", amount, common.TopUpStatusPending, createTimeAfter).
+		Order("create_time ASC").
+		Find(&topUps)
+	return topUps
+}
+
+// ClaimOrderWithTxHash 原子性地认领订单（更新状态并设置TxHash）
+func ClaimOrderWithTxHash(orderId int, txHash string) bool {
+	result := DB.Model(&TopUp{}).
+		Where("id = ? AND status = ? AND (tx_hash = '' OR tx_hash IS NULL)", orderId, common.TopUpStatusPending).
+		Updates(map[string]interface{}{
+			"status":  common.TopUpStatusProcessing,
+			"tx_hash": txHash,
+		})
+	return result.RowsAffected > 0
+}
+
+// RechargeUsdt USDT充值处理
+func RechargeUsdt(tradeNo string, txHash string) error {
+	topUp := &TopUp{}
+	var quotaToAdd int
+
+	refCol := "`trade_no`"
+	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+		refCol = `"trade_no"`
+	}
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
+		if err != nil {
+			return ErrTopUpNotFound
+		}
+
+		if topUp.PaymentProvider != PaymentProviderUsdt {
+			return ErrPaymentMethodMismatch
+		}
+
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil
+		}
+
+		if topUp.Status != common.TopUpStatusProcessing {
+			return ErrTopUpStatusInvalid
+		}
+
+		quotaToAdd, err = common.WalletQuotaFromDecimalStrict(
+			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
+		)
+		if err != nil || quotaToAdd <= 0 {
+			return ErrInvalidTopUpQuota
+		}
+
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		topUp.TxHash = txHash
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+
+		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil)
+	})
+
+	if err != nil {
+		common.SysError("usdt topup failed: " + err.Error())
+		return errors.New("充值失败，请联系管理员")
+	}
+	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "usdt topup")
+
+	if quotaToAdd > 0 {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("USDT充值成功，额度: %v, 支付金额: %.3f USDT", logger.FormatQuota(quotaToAdd), topUp.Money))
+	}
+
+	return nil
+}
+
+// GetPendingUsdtOrders 获取所有pending状态的USDT订单
+func GetPendingUsdtOrders() []*TopUp {
+	var orders []*TopUp
+	err := DB.Where("status = ? AND payment_method = ? AND expire_time > ?", 
+		common.TopUpStatusPending, 
+		PaymentMethodUsdt, 
+		time.Now().Unix()).Find(&orders).Error
+	if err != nil {
+		logger.SysError("failed to get pending USDT orders: " + err.Error())
+		return nil
+	}
+	return orders
+}
+
+// ExpireUsdtOrder 将订单标记为过期
+func ExpireUsdtOrder(orderId int) error {
+	return DB.Model(&TopUp{}).Where("id = ?", orderId).Update("status", "expired").Error
 }

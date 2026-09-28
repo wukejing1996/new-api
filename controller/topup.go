@@ -96,12 +96,35 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	// 如果启用了 USDT 支付，添加到支付方法列表
+	enableUsdt := isUsdtTopUpEnabled()
+	if enableUsdt {
+		hasUsdt := false
+		for _, method := range payMethods {
+			if method["type"] == model.PaymentMethodUsdt {
+				hasUsdt = true
+				break
+			}
+		}
+
+		if !hasUsdt {
+			usdtMethod := map[string]string{
+				"name":      "USDT",
+				"type":      model.PaymentMethodUsdt,
+				"color":     "#26A17B",
+				"min_topup": strconv.Itoa(setting.UsdtMinTopUp),
+			}
+			payMethods = append(payMethods, usdtMethod)
+		}
+	}
+
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
 		"enable_creem_topup":               isCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
+		"enable_usdt_topup":                enableUsdt,
 		"enable_redemption":                complianceConfirmed,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,
@@ -117,6 +140,9 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":            setting.StripeMinTopUp,
 		"waffo_min_topup":             setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup":     setting.WaffoPancakeMinTopUp,
+		"usdt_min_topup":              setting.UsdtMinTopUp,
+		"usdt_receive_address":        setting.UsdtReceiveAddress,
+		"usdt_network":                setting.UsdtNetwork,
 		"amount_options":              operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                    operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":                  common.TopUpLink,

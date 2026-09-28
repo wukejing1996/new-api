@@ -177,13 +177,30 @@ const paymentSchema = z.object({
   WaffoPancakeMerchantID: z.string(),
   WaffoPancakePrivateKey: z.string(),
   WaffoPancakeReturnURL: z.string(),
+  UsdtEnabled: z.boolean(),
+  UsdtMinTopUp: z.coerce.number().min(1),
+  UsdtReceiveAddress: z.string(),
+  UsdtTrongridApiKey: z.string(),
+  UsdtNetwork: z.string(),
+  UsdtCheckInterval: z.coerce.number().min(10),
+  UsdtOrderExpireTime: z.coerce.number().min(300),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
 type WaffoFormFieldValues = Omit<WaffoSettingsValues, 'WaffoPayMethods'>
+type WaffoPancakeFormFieldValues = WaffoPancakeSettingsValues
+type UsdtFormFieldValues = {
+  UsdtEnabled: boolean
+  UsdtMinTopUp: number
+  UsdtReceiveAddress: string
+  UsdtTrongridApiKey: string
+  UsdtNetwork: string
+  UsdtCheckInterval: number
+  UsdtOrderExpireTime: number
+}
 type PaymentBaseFormValues = Omit<
   PaymentFormValues,
-  keyof WaffoFormFieldValues | keyof WaffoPancakeSettingsValues
+  keyof WaffoFormFieldValues | keyof WaffoPancakeFormFieldValues | keyof UsdtFormFieldValues
 >
 
 const CURRENT_COMPLIANCE_TERMS_VERSION = 'v1'
@@ -202,6 +219,7 @@ type PaymentSettingsSectionProps = {
   waffoPancakeDefaultValues: WaffoPancakeSettingsValues
   waffoPancakeProvisionedStoreID?: string
   waffoPancakeProvisionedProductID?: string
+  usdtDefaultValues: UsdtFormFieldValues
   complianceDefaults: PaymentComplianceDefaults
 }
 
@@ -220,6 +238,7 @@ export function PaymentSettingsSection({
   waffoPancakeDefaultValues,
   waffoPancakeProvisionedStoreID,
   waffoPancakeProvisionedProductID,
+  usdtDefaultValues,
   complianceDefaults,
 }: PaymentSettingsSectionProps) {
   const { t } = useTranslation()
@@ -230,8 +249,9 @@ export function PaymentSettingsSection({
       ...defaultValues,
       ...waffoDefaultValues,
       ...waffoPancakeDefaultValues,
+      ...usdtDefaultValues,
     }),
-    [defaultValues, waffoDefaultValues, waffoPancakeDefaultValues]
+    [defaultValues, waffoDefaultValues, waffoPancakeDefaultValues, usdtDefaultValues]
   )
   const initialRef = React.useRef(initialFormValues)
   const defaultsSignature = React.useMemo(
@@ -879,13 +899,14 @@ export function PaymentSettingsSection({
           />
           <Tabs defaultValue='general' className='min-w-0'>
             <div className='overflow-x-auto pb-1'>
-              <TabsList className='grid min-w-[44rem] grid-cols-6'>
+              <TabsList className='grid min-w-[52rem] grid-cols-7'>
                 <TabsTrigger value='general'>{t('General')}</TabsTrigger>
                 <TabsTrigger value='epay'>Epay</TabsTrigger>
                 <TabsTrigger value='stripe'>{t('Stripe')}</TabsTrigger>
                 <TabsTrigger value='creem'>Creem</TabsTrigger>
                 <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
                 <TabsTrigger value='waffo'>Waffo</TabsTrigger>
+                <TabsTrigger value='usdt'>USDT</TabsTrigger>
               </TabsList>
             </div>
 
@@ -1627,6 +1648,154 @@ export function PaymentSettingsSection({
                 payMethods={waffoPayMethods}
                 onPayMethodsChange={setWaffoPayMethods}
               />
+            </TabsContent>
+
+            <TabsContent value='usdt' className={paymentTabContentClassName}>
+              <div className='space-y-6'>
+                <div>
+                  <h3 className='text-lg font-medium'>{t('USDT Payment')}</h3>
+                  <p className='text-muted-foreground text-sm'>
+                    {t('Configure USDT (TRC20) cryptocurrency payment via Tron blockchain')}
+                  </p>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name='UsdtEnabled'
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <SettingsSwitchContent>
+                        <FormLabel>{t('Enable USDT')}</FormLabel>
+                        <FormDescription>
+                          {t('Enable USDT cryptocurrency payment')}
+                        </FormDescription>
+                      </SettingsSwitchContent>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </SettingsSwitchItem>
+                  )}
+                />
+
+                <div className='grid gap-6 md:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='UsdtReceiveAddress'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Receive Address')}</FormLabel>
+                        <FormControl>
+                          <Input placeholder='TRC20 address' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Your TRC20 USDT receive address on Tron blockchain')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='UsdtMinTopUp'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Minimum Top-up')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={1}
+                            {...safeNumberFieldProps(field)}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Minimum amount users can top up via USDT')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='UsdtTrongridApiKey'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Trongrid API Key (Optional)')}</FormLabel>
+                        <FormControl>
+                          <Input placeholder='API key' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Optional API key for Trongrid to increase rate limits')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='UsdtNetwork'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Network')}</FormLabel>
+                        <FormControl>
+                          <Input placeholder='TRC20' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Blockchain network (default: TRC20)')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='UsdtCheckInterval'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Check Interval (seconds)')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={10}
+                            {...safeNumberFieldProps(field)}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Payment status check interval (minimum 10 seconds)')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='UsdtOrderExpireTime'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Order Expiration (seconds)')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={300}
+                            {...safeNumberFieldProps(field)}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('Order expiration time (default 1800 seconds = 30 minutes)')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
         </SettingsForm>
