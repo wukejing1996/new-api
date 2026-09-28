@@ -17,6 +17,12 @@ var monitorCancel context.CancelFunc
 // StartUsdtOrderMonitor 启动USDT订单监控定时任务
 func StartUsdtOrderMonitor() {
 	if !setting.IsUsdtTopUpEnabled() {
+		logger.SysLog("USDT payment not enabled, monitor not started")
+		return
+	}
+
+	if monitorCancel != nil {
+		logger.SysWarn("USDT monitor already running")
 		return
 	}
 
@@ -108,16 +114,10 @@ func checkPendingUsdtOrders(ctx context.Context) {
 			continue
 		}
 
-		// 检查TxHash是否已被使用
-		if model.IsTxHashUsed(tx.TransactionID) {
-			logger.SysWarn(fmt.Sprintf("USDT monitor: tx_hash already used for order %s, tx_hash=%s", order.TradeNo, tx.TransactionID))
-			continue
-		}
-
-		// 原子性认领订单
+		// 原子性认领订单（数据库层面已检查 TxHash 唯一性）
 		success := model.ClaimOrderWithTxHash(order.Id, tx.TransactionID)
 		if !success {
-			logger.SysWarn(fmt.Sprintf("USDT monitor: failed to claim order %s (already processed), tx_hash=%s", order.TradeNo, tx.TransactionID))
+			logger.SysWarn(fmt.Sprintf("USDT monitor: failed to claim order %s (already processed or tx_hash already used), tx_hash=%s", order.TradeNo, tx.TransactionID))
 			continue
 		}
 

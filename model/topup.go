@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -888,8 +889,10 @@ func GetPendingOrdersByAmount(amount float64, createTimeAfter int64) []*TopUp {
 
 // ClaimOrderWithTxHash 原子性地认领订单（更新状态并设置TxHash）
 func ClaimOrderWithTxHash(orderId int, txHash string) bool {
+	// 使用子查询确保 TxHash 在整个操作中保持唯一性
 	result := DB.Model(&TopUp{}).
 		Where("id = ? AND status = ? AND (tx_hash = '' OR tx_hash IS NULL)", orderId, common.TopUpStatusPending).
+		Where("NOT EXISTS (SELECT 1 FROM topups WHERE tx_hash = ?)", txHash).
 		Updates(map[string]interface{}{
 			"status":  common.TopUpStatusProcessing,
 			"tx_hash": txHash,
@@ -950,6 +953,8 @@ func RechargeUsdt(tradeNo string, txHash string) error {
 
 	if quotaToAdd > 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("USDT充值成功，额度: %v, 支付金额: %.3f USDT", logger.FormatQuota(quotaToAdd), topUp.Money))
+		// 给邀请者奖励
+		RewardInviterForStripeTopUp(topUp.UserId, topUp.Id, topUp.Money)
 	}
 
 	return nil

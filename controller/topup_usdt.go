@@ -16,6 +16,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 type UsdtPayRequest struct {
 	Amount int64 `json:"amount"`
 }
@@ -196,18 +200,11 @@ func CheckUsdtPayment(c *gin.Context) {
 		return
 	}
 
-	// 检查TxHash是否已被使用
-	if model.IsTxHashUsed(tx.TransactionID) {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("USDT 交易哈希已被使用 trade_no=%s tx_hash=%s", req.TradeNo, tx.TransactionID))
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "该交易已被使用"})
-		return
-	}
-
-	// 原子性认领订单
+	// 原子性认领订单（数据库层面已检查 TxHash 唯一性）
 	success := model.ClaimOrderWithTxHash(order.Id, tx.TransactionID)
 	if !success {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("USDT 订单认领失败（已被处理） trade_no=%s tx_hash=%s", req.TradeNo, tx.TransactionID))
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单已被处理"})
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("USDT 订单认领失败（订单已被处理或交易哈希已被使用） trade_no=%s tx_hash=%s", req.TradeNo, tx.TransactionID))
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "订单已被处理或该交易已被使用"})
 		return
 	}
 

@@ -57,6 +57,11 @@ func GetTRC20Transactions(address string, minTimestamp int64) ([]TRC20Transactio
 	}
 	defer resp.Body.Close()
 
+	// 检查 HTTP 状态码
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("trongrid API returned status %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -65,6 +70,11 @@ func GetTRC20Transactions(address string, minTimestamp int64) ([]TRC20Transactio
 	var result TrongridResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
+	}
+
+	// 检查 API 返回的 success 字段
+	if !result.Success {
+		return nil, fmt.Errorf("trongrid API returned success=false")
 	}
 
 	return result.Data, nil
@@ -79,6 +89,8 @@ func FindMatchingTransaction(address string, amount float64, minTimestamp int64)
 
 	// USDT使用6位小数
 	targetValue := int64(amount * 1000000)
+	// 允许 ±0.001 USDT 的误差容忍度（1000 最小单位）
+	tolerance := int64(1000)
 
 	for _, tx := range transactions {
 		if tx.To != address {
@@ -89,8 +101,14 @@ func FindMatchingTransaction(address string, amount float64, minTimestamp int64)
 		var txValue int64
 		fmt.Sscanf(tx.Value, "%d", &txValue)
 
-		// 金额匹配且在时间窗口内
-		if txValue == targetValue && tx.BlockTimestamp >= minTimestamp {
+		// 计算差值绝对值
+		diff := txValue - targetValue
+		if diff < 0 {
+			diff = -diff
+		}
+
+		// 金额在误差范围内且在时间窗口内
+		if diff <= tolerance && tx.BlockTimestamp >= minTimestamp {
 			return &tx, nil
 		}
 	}
