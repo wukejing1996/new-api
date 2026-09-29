@@ -246,3 +246,34 @@ export async function completeOrder(
   const res = await api.post('/api/user/topup/complete', request)
   return res.data
 }
+export type UsdtOrder = {
+  credited_amount: number
+  trade_no: string
+  address: string
+  amount: number
+  network: string
+  expire_time: number
+}
+
+export async function requestUsdtPayment(amount: number): Promise<UsdtOrder> {
+  const { data } = await api.post<{
+    message: string
+    data: UsdtOrder | string
+  }>('/api/user/usdt/request', { amount })
+  if (data.message !== 'success' || typeof data.data === 'string')
+    {throw new Error(
+      typeof data.data === 'string'
+        ? data.data
+        : 'Unable to create payment order'
+    )}
+  return data.data
+}
+
+export async function checkUsdtPayment(tradeNo: string): Promise<boolean> {
+  const { data } = await api.post<{ message: string; data: string }>(
+    '/api/user/usdt/check',
+    { trade_no: tradeNo }
+  )
+  if (data.message === 'error') throw new Error(data.data)
+  return data.message === 'success'
+}

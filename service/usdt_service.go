@@ -1,117 +1,143 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/shopspring/decimal"
 )
 
-type TRC20Transaction struct {
-	TransactionID   string `json:"transaction_id"`
-	TokenInfo       TokenInfo `json:"token_info"`
-	From            string `json:"from"`
-	To              string `json:"to"`
-	Type            string `json:"type"`
-	Value           string `json:"value"`
-	BlockTimestamp  int64  `json:"block_timestamp"`
-}
+const usdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
+type TRC20Transaction struct {
+	TransactionID  string    `json:"transaction_id"`
+	TokenInfo      TokenInfo `json:"token_info"`
+	From           string    `json:"from"`
+	To             string    `json:"to"`
+	Type           string    `json:"type"`
+	Value          string    `json:"value"`
+	BlockTimestamp int64     `json:"block_timestamp"`
+}
 type TokenInfo struct {
-	Symbol   string `json:"symbol"`
 	Address  string `json:"address"`
 	Decimals int    `json:"decimals"`
-	Name     string `json:"name"`
 }
-
 type TrongridResponse struct {
 	Data    []TRC20Transaction `json:"data"`
 	Success bool               `json:"success"`
+	Meta    struct {
+		Fingerprint string `json:"fingerprint"`
+	} `json:"meta"`
 }
 
-// GetTRC20Transactions 查询TRC20 USDT交易记录
-func GetTRC20Transactions(address string, minTimestamp int64) ([]TRC20Transaction, error) {
-	// USDT合约地址 (TRC20)
-	usdtContract := "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+var usdtHTTPClient = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 
-	url := fmt.Sprintf("https://api.trongrid.io/v1/accounts/%s/transactions/trc20?only_to=true&limit=200&contract_address=%s&min_timestamp=%d",
-		address, usdtContract, minTimestamp)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
+func FindMatchingTransaction(ctx context.Context, address string, amount float64, minTimestamp, maxTimestamp int64) (*TRC20Transaction, error) {
+	if !setting.ValidTronAddress(address) || math.IsNaN(amount) || math.IsInf(amount, 0) || amount <= 0 || amount > 1000001 || maxTimestamp < minTimestamp {
+		return nil, errors.New("invalid USDT order")
 	}
-
-	// 如果配置了API Key，添加到请求头
-	if setting.UsdtTrongridApiKey != "" {
-		req.Header.Set("TRON-PRO-API-KEY", setting.UsdtTrongridApiKey)
+	target := decimal.NewFromFloat(amount).Mul(decimal.NewFromInt(1000000))
+	if !target.Equal(target.Truncate(0)) {
+		return nil, errors.New("invalid USDT precision")
 	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	params := url.Values{
+		"only_to": {"true"}, "only_confirmed": {"true"}, "limit": {"200"},
+		"contract_address": {usdtContract}, "min_timestamp": {strconv.FormatInt(minTimestamp, 10)},
+		"max_timestamp": {strconv.FormatInt(maxTimestamp, 10)}, "order_by": {"block_timestamp,asc"},
 	}
-	defer resp.Body.Close()
-
-	// 检查 HTTP 状态码
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("trongrid API returned status %d", resp.StatusCode)
+	apiKey := setting.GetUsdtConfig().APIKey
+	for range 100 {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.trongrid.io/v1/accounts/"+address+"/transactions/trc20?"+params.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
+		if apiKey != "" {
+			req.Header.Set("TRON-PRO-API-KEY", apiKey)
+		}
+		resp, err := usdtHTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		var result TrongridResponse
+		err = common.DecodeJson(io.LimitReader(resp.Body, 2<<20), &result)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("TronGrid returned %d", resp.StatusCode)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !result.Success {
+			return nil, errors.New("TronGrid query unsuccessful")
+		}
+		for _, transfer := range result.Data {
+			if transfer.To != address || transfer.TokenInfo.Address != usdtContract || transfer.TokenInfo.Decimals != 6 || transfer.Type != "Transfer" {
+				continue
+			}
+			if transfer.BlockTimestamp < minTimestamp || transfer.BlockTimestamp > maxTimestamp {
+				continue
+			}
+			value, err := strconv.ParseInt(transfer.Value, 10, 64)
+			if err != nil || value <= 0 || strconv.FormatInt(value, 10) != transfer.Value || value != target.IntPart() {
+				continue
+			}
+			hash, err := hex.DecodeString(transfer.TransactionID)
+			if err != nil || len(hash) != 32 {
+				continue
+			}
+			transfer.TransactionID = hex.EncodeToString(hash)
+			return &transfer, nil
+		}
+		if result.Meta.Fingerprint == "" {
+			return nil, nil
+		}
+		if result.Meta.Fingerprint == params.Get("fingerprint") {
+			return nil, errors.New("TronGrid pagination did not advance")
+		}
+		params.Set("fingerprint", result.Meta.Fingerprint)
 	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var result TrongridResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
-	// 检查 API 返回的 success 字段
-	if !result.Success {
-		return nil, fmt.Errorf("trongrid API returned success=false")
-	}
-
-	return result.Data, nil
+	return nil, errors.New("TronGrid pagination limit reached; retry reconciliation")
 }
 
-// FindMatchingTransaction 查找匹配金额的交易
-func FindMatchingTransaction(address string, amount float64, minTimestamp int64) (*TRC20Transaction, error) {
-	transactions, err := GetTRC20Transactions(address, minTimestamp)
+// Both manual checks and the monitor use the immutable order snapshot.
+func CheckUsdtOrder(ctx context.Context, order *model.TopUp) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if order.UsdtQuota <= 0 || order.UsdtAddress == "" {
+		return errors.New("legacy USDT order requires manual reconciliation")
+	}
+	if order.Status == common.TopUpStatusSuccess {
+		return nil
+	}
+	if order.Status != common.TopUpStatusPending && order.Status != "expired" {
+		return model.ErrTopUpStatusInvalid
+	}
+	if time.Now().Unix() >= order.ExpireTime {
+		if err := model.ExpireUsdtOrder(order.Id); err != nil {
+			return err
+		}
+	}
+	startTime := order.UsdtStartTime
+	if startTime == 0 {
+		startTime = order.CreateTime * 1000
+	}
+	transfer, err := FindMatchingTransaction(ctx, order.UsdtAddress, order.Money, startTime, order.ExpireTime*1000-1)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	// USDT使用6位小数
-	targetValue := int64(amount * 1000000)
-	// 允许 ±0.001 USDT 的误差容忍度（1000 最小单位）
-	tolerance := int64(1000)
-
-	for _, tx := range transactions {
-		if tx.To != address {
-			continue
-		}
-
-		// 解析交易金额
-		var txValue int64
-		fmt.Sscanf(tx.Value, "%d", &txValue)
-
-		// 计算差值绝对值
-		diff := txValue - targetValue
-		if diff < 0 {
-			diff = -diff
-		}
-
-		// 金额在误差范围内且在时间窗口内
-		if diff <= tolerance && tx.BlockTimestamp >= minTimestamp {
-			return &tx, nil
-		}
+	if transfer != nil {
+		return model.RechargeUsdt(order.TradeNo, transfer.TransactionID)
 	}
-
-	return nil, nil
+	return nil
 }

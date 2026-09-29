@@ -6934,5 +6934,14 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
     "Zoom": "ズーム"
-  }
+  },
+  "USDT payment": "USDT 支払い",
+  "Check payment status": "入金状況を確認",
+  "USDT confirmation notice": "期限内に送金した後、ブロックチェーンでの確認をお待ちください。支払い履歴から状況を確認できます。確認中は重複して送金しないでください。",
+  "USDT expired notice": "注文の有効期限が切れました。この注文の情報で送金しないでください。未払いの場合は新しい注文を作成してください。期限後の送金は残高に反映されない場合があります。",
+  "USDT exact amount notice": "表示金額を小数点以下3桁まで正確に送金してください。識別用の端数を含む受取金額の全額が米ドル残高に入金されます。",
+  "USDT network fee notice": "TRON（TRC20）の USDT のみ対応。送金手数料は別途必要です。表示金額の全額が到着するようにしてください。",
+  "Order expires in": "送金期限まで",
+  "Payment not confirmed yet": "支払いはまだ処理中です。完了すると請求履歴が更新されます。",
+  "USDT payment deadline warning": "必ず注文の有効期限内に送金を完了してください。ウォレットや取引所の処理とブロックチェーンでの確認に余裕を持たせてください。期限後の送金は残高に反映されない場合があります。期限切れの注文には送金しないでください。"
 }

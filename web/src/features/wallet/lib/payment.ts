@@ -155,6 +155,13 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
     return DEFAULT_MIN_TOPUP
   }
 
+  if (
+    topupInfo.enable_usdt_topup &&
+    !topupInfo.enable_online_topup &&
+    !topupInfo.enable_stripe_topup
+  )
+    {return topupInfo.usdt_min_topup || 10}
+
   if (topupInfo.enable_online_topup) {
     return topupInfo.min_topup
   }

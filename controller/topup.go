@@ -98,6 +98,7 @@ func GetTopUpInfo(c *gin.Context) {
 
 	// 如果启用了 USDT 支付，添加到支付方法列表
 	enableUsdt := isUsdtTopUpEnabled()
+	usdtConfig := setting.GetUsdtConfig()
 	if enableUsdt {
 		hasUsdt := false
 		for _, method := range payMethods {
@@ -112,7 +113,7 @@ func GetTopUpInfo(c *gin.Context) {
 				"name":      "USDT",
 				"type":      model.PaymentMethodUsdt,
 				"color":     "#26A17B",
-				"min_topup": strconv.Itoa(setting.UsdtMinTopUp),
+				"min_topup": strconv.Itoa(usdtConfig.MinTopUp),
 			}
 			payMethods = append(payMethods, usdtMethod)
 		}
@@ -140,9 +141,9 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":            setting.StripeMinTopUp,
 		"waffo_min_topup":             setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup":     setting.WaffoPancakeMinTopUp,
-		"usdt_min_topup":              setting.UsdtMinTopUp,
-		"usdt_receive_address":        setting.UsdtReceiveAddress,
-		"usdt_network":                setting.UsdtNetwork,
+		"usdt_min_topup":              usdtConfig.MinTopUp,
+		"usdt_receive_address":        usdtConfig.Address,
+		"usdt_network":                usdtConfig.Network,
 		"amount_options":              operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                    operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":                  common.TopUpLink,

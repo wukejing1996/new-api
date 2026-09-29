@@ -120,6 +120,8 @@ export interface WaffoPayMethod {
  * Topup configuration information
  */
 export interface TopupInfo {
+  enable_usdt_topup?: boolean
+  usdt_min_topup?: number
   /** Whether online topup is enabled */
   enable_online_topup: boolean
   /** Whether Stripe topup is enabled */
@@ -253,6 +255,8 @@ export type TopupStatus = 'success' | 'pending' | 'expired'
  * Topup billing record
  */
 export interface TopupRecord {
+  usdt_address?: string
+  expire_time?: number
   /** Record ID */
   id: number
   /** User ID */

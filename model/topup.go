@@ -1,10 +1,12 @@
 package model
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"maps"
 	"math"
+	"math/big"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -28,6 +30,12 @@ type TopUp struct {
 	InviterRewarded bool    `json:"-" gorm:"column:inviter_rewarded"`
 	TxHash          string  `json:"tx_hash" gorm:"type:varchar(255);index;default:''"`
 	ExpireTime      int64   `json:"expire_time" gorm:"default:0"`
+	// Nullable unique keys leave other providers and legacy orders untouched.
+	UsdtAmountKey *string `json:"-" gorm:"type:varchar(100);uniqueIndex"`
+	UsdtTxHash    *string `json:"-" gorm:"type:varchar(64);uniqueIndex"`
+	UsdtAddress   string  `json:"usdt_address,omitempty" gorm:"type:varchar(34)"`
+	UsdtQuota     int     `json:"-"`
+	UsdtStartTime int64   `json:"-"`
 }
 
 const (
@@ -400,7 +408,7 @@ func RewardInviterForStripeTopUp(userId int, topUpId int, paidAmount float64) {
 
 		var topUp TopUp
 		if err := lockForUpdate(tx).
-			Where("id = ? AND user_id = ? AND payment_provider = ? AND status = ? AND inviter_rewarded = ?", topUpId, userId, PaymentProviderStripe, common.TopUpStatusSuccess, false).
+			Where("id = ? AND user_id = ? AND payment_provider IN ? AND status = ? AND inviter_rewarded = ?", topUpId, userId, []string{PaymentProviderStripe, PaymentProviderUsdt}, common.TopUpStatusSuccess, false).
 			First(&topUp).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
@@ -631,12 +639,15 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return nil
 		}
 
-		if topUp.Status != common.TopUpStatusPending {
+		if topUp.Status != common.TopUpStatusPending && !(topUp.PaymentProvider == PaymentProviderUsdt && (topUp.Status == "expired" || topUp.Status == common.TopUpStatusProcessing)) {
 			return errors.New("order is not pending payment and cannot be repaired")
 		}
 
 		var quotaErr error
 		quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
+		if topUp.PaymentProvider == PaymentProviderUsdt && topUp.UsdtQuota > 0 {
+			quotaToAdd, quotaErr = topUp.UsdtQuota, nil
+		}
 		if quotaErr != nil || quotaToAdd <= 0 {
 			return ErrInvalidTopUpQuota
 		}
@@ -644,6 +655,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		// 标记完成
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
+		if topUp.PaymentProvider == PaymentProviderUsdt {
+			topUp.UsdtAmountKey = nil
+		}
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
@@ -860,120 +874,137 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 	return nil
 }
 
-// GetTopUpByTxHash 根据交易哈希查询订单
-func GetTopUpByTxHash(txHash string) *TopUp {
-	var topUp TopUp
-	err := DB.Where("tx_hash = ?", txHash).First(&topUp).Error
+// CreateUsdtOrder reserves an exact payment amount only for the active order.
+// Expired amounts are reusable by design; late transfers cannot identify their original payer.
+func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
+	if order.Amount <= 0 || order.Amount > 10000 {
+		return nil, ErrInvalidTopUpQuota
+	}
+	// Release elapsed reservations even if the monitor has not reached them yet.
+	if err := DB.Model(&TopUp{}).Where("payment_provider = ? AND status = ? AND expire_time <= ? AND usdt_amount_key IS NOT NULL", PaymentProviderUsdt, common.TopUpStatusPending, time.Now().Unix()).Updates(map[string]any{"status": "expired", "usdt_amount_key": nil}).Error; err != nil {
+		return nil, err
+	}
+	start, err := rand.Int(rand.Reader, big.NewInt(500))
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return &topUp
-}
-
-// IsTxHashUsed 检查交易哈希是否已被使用
-func IsTxHashUsed(txHash string) bool {
-	var count int64
-	DB.Model(&TopUp{}).Where("tx_hash = ? AND tx_hash != ''", txHash).Count(&count)
-	return count > 0
-}
-
-// GetPendingOrdersByAmount 获取指定金额的pending订单
-func GetPendingOrdersByAmount(amount float64, createTimeAfter int64) []*TopUp {
-	var topUps []*TopUp
-	DB.Where("money = ? AND status = ? AND create_time > ?", amount, common.TopUpStatusPending, createTimeAfter).
-		Order("create_time ASC").
-		Find(&topUps)
-	return topUps
-}
-
-// ClaimOrderWithTxHash 原子性地认领订单（更新状态并设置TxHash）
-func ClaimOrderWithTxHash(orderId int, txHash string) bool {
-	// 使用子查询确保 TxHash 在整个操作中保持唯一性
-	result := DB.Model(&TopUp{}).
-		Where("id = ? AND status = ? AND (tx_hash = '' OR tx_hash IS NULL)", orderId, common.TopUpStatusPending).
-		Where("NOT EXISTS (SELECT 1 FROM topups WHERE tx_hash = ?)", txHash).
-		Updates(map[string]interface{}{
-			"status":  common.TopUpStatusProcessing,
-			"tx_hash": txHash,
+	for attempt := range 500 {
+		micros := order.Amount*1000000 + ((start.Int64()+int64(attempt))%500+1)*1000
+		key := fmt.Sprintf("%s:%d", order.UsdtAddress, micros)
+		err := DB.Transaction(func(tx *gorm.DB) error {
+			var user User
+			if err := lockForUpdate(tx).Select("id", "quota").First(&user, order.UserId).Error; err != nil {
+				return err
+			}
+			var pending TopUp
+			err := tx.Where("user_id = ? AND amount = ? AND payment_provider = ? AND status = ? AND expire_time > ? AND usdt_amount_key IS NOT NULL", order.UserId, order.Amount, PaymentProviderUsdt, common.TopUpStatusPending, time.Now().Unix()).First(&pending).Error
+			if err == nil {
+				*order = pending
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&TopUp{}).Where("usdt_amount_key = ?", key).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return errUsdtAmountCollision
+			}
+			money := decimal.NewFromInt(micros).Div(decimal.NewFromInt(1000000))
+			quota, err := common.WalletQuotaFromDecimalStrict(money.Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
+			if err != nil || quota <= 0 {
+				return ErrInvalidTopUpQuota
+			}
+			if user.Quota > common.MaxWalletQuota-quota {
+				return ErrWalletQuotaLimitExceeded
+			}
+			order.UsdtAmountKey = &key
+			order.Money = money.InexactFloat64()
+			order.UsdtQuota = quota
+			order.UsdtStartTime = time.Now().UnixMilli()
+			order.Id = 0
+			return tx.Create(order).Error
 		})
-	return result.RowsAffected > 0
+		if err == nil {
+			return order, nil
+		}
+		if !errors.Is(err, errUsdtAmountCollision) {
+			var count int64
+			if DB.Model(&TopUp{}).Where("usdt_amount_key = ?", key).Count(&count).Error != nil || count == 0 {
+				return nil, err
+			}
+		}
+	}
+	return nil, errors.New("all USDT payment amounts are currently reserved; please try again later")
 }
 
-// RechargeUsdt USDT充值处理
-func RechargeUsdt(tradeNo string, txHash string) error {
-	topUp := &TopUp{}
-	var quotaToAdd int
+var errUsdtAmountCollision = errors.New("USDT amount already reserved")
 
-	refCol := "`trade_no`"
-	if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		refCol = `"trade_no"`
+// RechargeUsdt commits the transaction claim, order status and wallet credit
+// together. Unique database constraints also protect separate server instances.
+func RechargeUsdt(tradeNo, txHash string) error {
+	if len(txHash) != 64 {
+		return errors.New("invalid transaction hash")
 	}
-
+	topUp := &TopUp{}
+	quotaToAdd := 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error
-		if err != nil {
-			return ErrTopUpNotFound
-		}
-
-		if topUp.PaymentProvider != PaymentProviderUsdt {
-			return ErrPaymentMethodMismatch
-		}
-
-		if topUp.Status == common.TopUpStatusSuccess {
-			return nil
-		}
-
-		if topUp.Status != common.TopUpStatusProcessing {
-			return ErrTopUpStatusInvalid
-		}
-
-		quotaToAdd, err = common.WalletQuotaFromDecimalStrict(
-			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-		)
-		if err != nil || quotaToAdd <= 0 {
-			return ErrInvalidTopUpQuota
-		}
-
-		topUp.CompleteTime = common.GetTimestamp()
-		topUp.Status = common.TopUpStatusSuccess
-		topUp.TxHash = txHash
-		if err := tx.Save(topUp).Error; err != nil {
+		if err := lockForUpdate(tx).Where("trade_no = ?", tradeNo).First(topUp).Error; err != nil {
 			return err
 		}
-
+		if topUp.PaymentProvider != PaymentProviderUsdt || topUp.PaymentMethod != PaymentMethodUsdt {
+			return ErrPaymentMethodMismatch
+		}
+		if topUp.UsdtAddress == "" || topUp.UsdtQuota <= 0 {
+			return errors.New("legacy USDT order requires manual reconciliation")
+		}
+		if topUp.Status == common.TopUpStatusSuccess {
+			if topUp.TxHash != txHash {
+				return ErrTopUpStatusInvalid
+			}
+			return nil
+		}
+		if topUp.Status != common.TopUpStatusPending && topUp.Status != "expired" {
+			return ErrTopUpStatusInvalid
+		}
+		var used int64
+		if err := tx.Model(&TopUp{}).Where("tx_hash = ? AND id <> ?", txHash, topUp.Id).Count(&used).Error; err != nil {
+			return err
+		}
+		if used > 0 {
+			return errors.New("transaction already credited")
+		}
+		result := tx.Model(topUp).Where("status = ?", topUp.Status).Updates(map[string]any{
+			"status": common.TopUpStatusSuccess, "tx_hash": txHash, "usdt_tx_hash": txHash, "complete_time": common.GetTimestamp(), "usdt_amount_key": nil,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrTopUpStatusInvalid
+		}
+		quotaToAdd = topUp.UsdtQuota
 		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd, nil)
 	})
-
 	if err != nil {
-		common.SysError("usdt topup failed: " + err.Error())
-		return errors.New("充值失败，请联系管理员")
+		return err
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "usdt topup")
-
 	if quotaToAdd > 0 {
-		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("USDT充值成功，额度: %v, 支付金额: %.3f USDT", logger.FormatQuota(quotaToAdd), topUp.Money))
-		// 给邀请者奖励
+		syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "usdt topup")
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("USDT top-up: quota %v, paid %.3f USDT, tx %s", logger.FormatQuota(quotaToAdd), topUp.Money, txHash))
 		RewardInviterForStripeTopUp(topUp.UserId, topUp.Id, topUp.Money)
 	}
-
 	return nil
 }
 
-// GetPendingUsdtOrders 获取所有pending状态的USDT订单
-func GetPendingUsdtOrders() []*TopUp {
+func GetPendingUsdtOrders() ([]*TopUp, error) {
 	var orders []*TopUp
-	err := DB.Where("status = ? AND payment_method = ? AND expire_time > ?",
-		common.TopUpStatusPending,
-		PaymentMethodUsdt,
-		time.Now().Unix()).Find(&orders).Error
-	if err != nil {
-		common.SysError("failed to get pending USDT orders: " + err.Error())
-		return nil
-	}
-	return orders
+	err := DB.Where("status = ? AND payment_provider = ? AND usdt_amount_key IS NOT NULL", common.TopUpStatusPending, PaymentProviderUsdt).Order("id ASC").Find(&orders).Error
+	return orders, err
 }
 
-// ExpireUsdtOrder 将订单标记为过期
 func ExpireUsdtOrder(orderId int) error {
-	return DB.Model(&TopUp{}).Where("id = ?", orderId).Update("status", "expired").Error
+	return DB.Model(&TopUp{}).Where("id = ? AND status = ? AND payment_provider = ?", orderId, common.TopUpStatusPending, PaymentProviderUsdt).Updates(map[string]any{"status": "expired", "usdt_amount_key": nil}).Error
 }

@@ -40,6 +40,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ### Common Code Quality
 
+- Preserve existing formatting, whitespace, line breaks, and comments in code inherited from `main` unless the functional change requires editing them. Avoid whole-file formatting and unrelated cleanup so upstream merges stay small.
 - New code should stay direct and readable. Prefer early returns, clear branches, and well-named local variables to deep nesting or layered control flow.
 - Minimize nested function definitions. Use them only when required by a callback API or when keeping the closure local is clearly simpler than adding another symbol.
 - Avoid adding package-level or module-level helper functions that have only one caller and do not express a stable business concept. Inline that logic at the call site instead.

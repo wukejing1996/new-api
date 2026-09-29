@@ -48,6 +48,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 
+import type { UsdtOrder } from '../../api'
 import { useBillingHistory } from '../../hooks/use-billing-history'
 import {
   getStatusConfig,
@@ -56,11 +57,13 @@ import {
 } from '../../lib/billing'
 
 interface BillingHistoryDialogProps {
+  onResumeUsdt?: (order: UsdtOrder) => void
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 export function BillingHistoryDialog({
+  onResumeUsdt,
   open,
   onOpenChange,
 }: BillingHistoryDialogProps) {
@@ -220,6 +223,29 @@ export function BillingHistoryDialog({
                                 copyText={String(record.user_id)}
                               />
                             )}
+                            {onResumeUsdt &&
+                              record.payment_method === 'usdt' &&
+                              record.usdt_address &&
+                              record.expire_time &&
+                              ['pending', 'expired'].includes(
+                                record.status
+                              ) && (
+                                <Button
+                                  size='sm'
+                                  onClick={() =>
+                                    onResumeUsdt({
+                                      trade_no: record.trade_no,
+                                      address: record.usdt_address ?? '',
+                                      amount: record.money,
+                                      credited_amount: record.money,
+                                      expire_time: record.expire_time ?? 0,
+                                      network: 'TRC20',
+                                    })
+                                  }
+                                >
+                                  {t('Check payment status')}
+                                </Button>
+                              )}
                           </div>
                           <div className='text-muted-foreground text-xs'>
                             {formatTimestamp(record.create_time)}
@@ -266,18 +292,23 @@ export function BillingHistoryDialog({
                       </div>
 
                       {/* Admin Actions */}
-                      {isAdmin && record.status === 'pending' && (
-                        <div className='mt-4 flex justify-end'>
-                          <Button
-                            size='sm'
-                            variant='outline'
-                            onClick={() => setConfirmTradeNo(record.trade_no)}
-                            disabled={completing}
-                          >
-                            {t('Complete Order')}
-                          </Button>
-                        </div>
-                      )}
+                      {isAdmin &&
+                        (record.status === 'pending' ||
+                          (record.payment_method === 'usdt' &&
+                            ['expired', 'processing'].includes(
+                              record.status
+                            ))) && (
+                          <div className='mt-4 flex justify-end'>
+                            <Button
+                              size='sm'
+                              variant='outline'
+                              onClick={() => setConfirmTradeNo(record.trade_no)}
+                              disabled={completing}
+                            >
+                              {t('Complete Order')}
+                            </Button>
+                          </div>
+                        )}
                     </div>
                   )
                 })}

@@ -131,6 +131,7 @@ export function RechargeFormCard({
   }
 
   const hasConfigurableTopup =
+    topupInfo?.enable_usdt_topup ||
     topupInfo?.enable_online_topup ||
     topupInfo?.enable_stripe_topup ||
     enableWaffoTopup ||

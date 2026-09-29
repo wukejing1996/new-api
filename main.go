@@ -135,7 +135,7 @@ func main() {
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 
-	// USDT order monitor task (check pending orders every 60 seconds)
+	// USDT reconciliation keeps running for existing orders even when checkout is disabled.
 	service.StartUsdtOrderMonitor()
 
 	// Report this process as a system instance so the System Info page can show

@@ -271,6 +271,13 @@ export type ModelSettings = {
 }
 
 export type BillingSettings = {
+  UsdtEnabled: boolean
+  UsdtMinTopUp: number
+  UsdtReceiveAddress: string
+  UsdtTrongridApiKey: string
+  UsdtNetwork: string
+  UsdtCheckInterval: number
+  UsdtOrderExpireTime: number
   QuotaForNewUser: number
   QuotaForInviter: number
   QuotaForInvitee: number

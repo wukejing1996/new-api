@@ -6934,5 +6934,14 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "USDT payment": "Paiement USDT",
+  "Check payment status": "Vérifier le paiement",
+  "USDT confirmation notice": "Après paiement dans le délai, attendez la confirmation sur la blockchain. Consultez le statut dans l’historique des paiements. Ne payez pas à nouveau pendant la confirmation.",
+  "USDT expired notice": "Cette commande a expiré. N’utilisez plus ses informations de paiement. Créez une nouvelle commande si vous n’avez pas payé. Les paiements tardifs peuvent ne pas être crédités.",
+  "USDT exact amount notice": "Envoyez le montant exact avec les trois décimales. Le montant reçu intégral, y compris la fraction d’identification, est crédité sur votre solde USD.",
+  "USDT network fee notice": "Utilisez uniquement USDT sur TRON (TRC20). Les frais sont séparés ; le montant affiché doit parvenir intégralement à cette adresse.",
+  "Order expires in": "Temps restant",
+  "Payment not confirmed yet": "Le paiement est toujours en cours de traitement. L'historique se mettra à jour une fois terminé.",
+  "USDT payment deadline warning": "Effectuez le transfert avant l’expiration de la commande. Prévoyez le délai de traitement du portefeuille ou de la plateforme et de confirmation sur la blockchain. Un paiement tardif peut ne pas être crédité. Ne payez pas une commande expirée."
 }

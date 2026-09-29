@@ -236,6 +236,9 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if err := setting.ValidateUsdtOption(key, value); err != nil {
+		return err
+	}
 	if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
 		return err
 	}
@@ -270,12 +273,16 @@ func UpdateOption(key string, value string) error {
 		Key: key,
 	}
 	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
+	if err := DB.FirstOrCreate(&option, Option{Key: key}).Error; err != nil {
+		return err
+	}
 	option.Value = value
 	// Save is a combination function.
 	// If save value does not contain primary key, it will execute Create,
 	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
+	if err := DB.Save(&option).Error; err != nil {
+		return err
+	}
 	// Update OptionMap
 	return updateOptionMap(key, value)
 }

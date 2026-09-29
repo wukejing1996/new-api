@@ -23,12 +23,15 @@ import { SectionPageLayout } from '@/components/layout'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 
+import { requestUsdtPayment, type UsdtOrder } from './api'
 import { AffiliateRewardsCard } from './components/affiliate-rewards-card'
 import { BillingHistoryDialog } from './components/dialogs/billing-history-dialog'
 import { CreemConfirmDialog } from './components/dialogs/creem-confirm-dialog'
 import { PaymentConfirmDialog } from './components/dialogs/payment-confirm-dialog'
 import { TransferDialog } from './components/dialogs/transfer-dialog'
+import { UsdtPaymentDialog } from './components/dialogs/usdt-payment-dialog'
 import { RechargeFormCard } from './components/recharge-form-card'
 import { SubscriptionPlansCard } from './components/subscription-plans-card'
 import { WalletStatsCard } from './components/wallet-stats-card'
@@ -62,6 +65,7 @@ interface WalletProps {
 export function Wallet(props: WalletProps) {
   const { t } = useTranslation()
   const [user, setUser] = useState<UserWalletData | null>(null)
+  const [usdtOrder, setUsdtOrder] = useState<UsdtOrder | null>(null)
   const [userLoading, setUserLoading] = useState(true)
   const [topupAmount, setTopupAmount] = useState(0)
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
@@ -177,6 +181,10 @@ export function Wallet(props: WalletProps) {
 
     try {
       // Validate minimum topup
+      if (method.type === 'usdt') {
+        setUsdtOrder(await requestUsdtPayment(topupAmount))
+        return
+      }
       const minTopup = getMinTopupAmount(topupInfo)
       if (topupAmount < minTopup) {
         return
@@ -185,6 +193,8 @@ export function Wallet(props: WalletProps) {
       // Calculate payment amount and show confirmation dialog
       await calculatePaymentAmount(topupAmount, method.type)
       setConfirmDialogOpen(true)
+    } catch (error) {
+      handleServerError(error)
     } finally {
       setPaymentLoading(null)
     }
@@ -365,6 +375,17 @@ export function Wallet(props: WalletProps) {
         usdExchangeRate={effectiveUsdExchangeRate}
       />
 
+      {usdtOrder && (
+        <UsdtPaymentDialog
+          order={usdtOrder}
+          onClose={() => setUsdtOrder(null)}
+          onPaid={() => {
+            setUsdtOrder(null)
+            void fetchUser()
+          }}
+        />
+      )}
+
       <TransferDialog
         open={transferDialogOpen}
         onOpenChange={setTransferDialogOpen}
@@ -374,6 +395,10 @@ export function Wallet(props: WalletProps) {
       />
 
       <BillingHistoryDialog
+        onResumeUsdt={(order) => {
+          setBillingDialogOpen(false)
+          setUsdtOrder(order)
+        }}
         open={billingDialogOpen}
         onOpenChange={setBillingDialogOpen}
       />

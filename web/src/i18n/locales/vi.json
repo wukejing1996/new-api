@@ -6934,5 +6934,14 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "USDT payment": "Thanh toán USDT",
+  "Check payment status": "Kiểm tra thanh toán",
+  "USDT confirmation notice": "Sau khi thanh toán trong thời hạn, hãy chờ blockchain xác nhận. Bạn có thể đóng cửa sổ và xem trạng thái trong lịch sử thanh toán. Không thanh toán lại khi đang chờ xác nhận.",
+  "USDT expired notice": "Đơn đã hết hạn. Không chuyển tiền theo thông tin của đơn này. Nếu chưa thanh toán, hãy tạo đơn mới. Thanh toán muộn có thể không được cộng vào tài khoản.",
+  "USDT exact amount notice": "Chuyển đúng số tiền hiển thị với đủ ba chữ số thập phân. Toàn bộ số tiền nhận được, gồm phần lẻ nhận dạng, sẽ được cộng vào số dư USD.",
+  "USDT network fee notice": "Chỉ dùng USDT trên TRON (TRC20). Phí mạng hoặc rút tiền tính riêng; địa chỉ phải nhận đủ số tiền hiển thị.",
+  "Order expires in": "Thời gian chuyển còn lại",
+  "Payment not confirmed yet": "Thanh toán vẫn đang được xử lý. Lịch sử hóa đơn sẽ cập nhật khi hoàn tất.",
+  "USDT payment deadline warning": "Phải hoàn tất chuyển tiền trước khi đơn hết hạn. Hãy dành thời gian cho ví hoặc sàn xử lý và blockchain xác nhận. Thanh toán muộn có thể không được cộng vào tài khoản. Không thanh toán đơn đã hết hạn."
 }

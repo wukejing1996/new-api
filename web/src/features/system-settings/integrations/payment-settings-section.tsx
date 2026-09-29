@@ -178,12 +178,12 @@ const paymentSchema = z.object({
   WaffoPancakePrivateKey: z.string(),
   WaffoPancakeReturnURL: z.string(),
   UsdtEnabled: z.boolean(),
-  UsdtMinTopUp: z.coerce.number().min(1),
+  UsdtMinTopUp: z.coerce.number().int().min(1).max(10000),
   UsdtReceiveAddress: z.string(),
   UsdtTrongridApiKey: z.string(),
-  UsdtNetwork: z.string(),
-  UsdtCheckInterval: z.coerce.number().min(10),
-  UsdtOrderExpireTime: z.coerce.number().min(300),
+  UsdtNetwork: z.literal('TRC20'),
+  UsdtCheckInterval: z.coerce.number().int().min(10).max(3600),
+  UsdtOrderExpireTime: z.coerce.number().int().min(300).max(86400),
 })
 
 type PaymentFormValues = z.infer<typeof paymentSchema>
@@ -194,7 +194,7 @@ type UsdtFormFieldValues = {
   UsdtMinTopUp: number
   UsdtReceiveAddress: string
   UsdtTrongridApiKey: string
-  UsdtNetwork: string
+  UsdtNetwork: 'TRC20'
   UsdtCheckInterval: number
   UsdtOrderExpireTime: number
 }
@@ -528,6 +528,22 @@ export function PaymentSettingsSection({
     }
 
     const updates: Array<{ key: string; value: string | number | boolean }> = []
+
+    // Save connection details first, then enable new checkouts.
+    for (const key of [
+      'UsdtReceiveAddress',
+      'UsdtMinTopUp',
+      'UsdtNetwork',
+      'UsdtCheckInterval',
+      'UsdtOrderExpireTime',
+      'UsdtTrongridApiKey',
+      'UsdtEnabled',
+    ] as const) {
+      const raw = values[key]
+      const value = typeof raw === 'string' ? raw.trim() : raw
+      if (key === 'UsdtTrongridApiKey' && !value) continue
+      if (value !== initialRef.current[key]) updates.push({ key, value })
+    }
 
     if (sanitized.PayAddress !== initial.PayAddress) {
       updates.push({ key: 'PayAddress', value: sanitized.PayAddress })
@@ -1726,7 +1742,12 @@ export function PaymentSettingsSection({
                       <FormItem>
                         <FormLabel>{t('Trongrid API Key (Optional)')}</FormLabel>
                         <FormControl>
-                          <Input placeholder='API key' {...field} />
+                          <Input
+                            type='password'
+                            autoComplete='new-password'
+                            placeholder='API key'
+                            {...field}
+                          />
                         </FormControl>
                         <FormDescription>
                           {t('Optional API key for Trongrid to increase rate limits')}
@@ -1743,7 +1764,7 @@ export function PaymentSettingsSection({
                       <FormItem>
                         <FormLabel>{t('Network')}</FormLabel>
                         <FormControl>
-                          <Input placeholder='TRC20' {...field} />
+                          <Input readOnly placeholder='TRC20' {...field} />
                         </FormControl>
                         <FormDescription>
                           {t('Blockchain network (default: TRC20)')}

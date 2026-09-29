@@ -184,7 +184,7 @@ const BILLING_SECTIONS = [
           UsdtMinTopUp: settings.UsdtMinTopUp ?? 10,
           UsdtReceiveAddress: settings.UsdtReceiveAddress ?? '',
           UsdtTrongridApiKey: settings.UsdtTrongridApiKey ?? '',
-          UsdtNetwork: settings.UsdtNetwork ?? 'TRC20',
+          UsdtNetwork: 'TRC20',
           UsdtCheckInterval: settings.UsdtCheckInterval ?? 30,
           UsdtOrderExpireTime: settings.UsdtOrderExpireTime ?? 1800,
         }}

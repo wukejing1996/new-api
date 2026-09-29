@@ -64,6 +64,7 @@ export async function requestPaymentAmount(
   paymentType: string,
   calculators: PaymentAmountCalculators = defaultPaymentAmountCalculators
 ): Promise<number> {
+  if (paymentType === 'usdt') return topupAmount
   let calculator = calculators.regular
   if (isStripePayment(paymentType)) {
     calculator = calculators.stripe

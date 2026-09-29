@@ -6934,5 +6934,14 @@
     "Zhipu GLM": "智譜GLM",
     "Zhipu V4": "智譜 V4",
     "Zoom": "縮放"
-  }
+  },
+  "USDT payment": "USDT 支付",
+  "Check payment status": "查询到账状态",
+  "USDT confirmation notice": "有效期內付款後，請等待鏈上確認。可關閉視窗，在付款紀錄中查詢入帳狀態；確認期間請勿重複付款。",
+  "USDT expired notice": "訂單已過期，請勿按此訂單的付款資訊繼續轉帳。尚未付款請重新建立訂單，逾時付款可能導致儲值失敗、資金無法計入您的帳戶。",
+  "USDT exact amount notice": "請按顯示金額精確轉帳，保留全部三位小數。實際收到的完整金額（含識別用隨機尾數）將計入美元餘額。",
+  "USDT network fee notice": "仅支持 TRON（TRC20）网络的 USDT。网络费或提币手续费另计，请确保收款地址实际收到完整显示金额。",
+  "Order expires in": "剩余转账时间",
+  "Payment not confirmed yet": "付款仍在处理中，完成后账单记录会自动更新。",
+  "USDT payment deadline warning": "請務必在訂單有效期內完成轉帳，並為錢包或交易所處理及鏈上確認預留時間。逾時付款可能導致儲值失敗、資金無法計入您的帳戶。訂單過期後請勿繼續付款。"
 }
