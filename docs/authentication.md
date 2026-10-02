@@ -13,6 +13,14 @@
 
 `SESSION_SECRET` 用于派生 Access Token、Security Proof、Refresh Token 摘要和 AuthFlow 摘要的不同用途密钥。生产环境及多节点部署必须在所有节点配置相同的高强度随机值；更换该值会使现有登录、临时鉴权流程和 Security Proof 全部失效。
 
+### Docker Compose 密钥配置
+
+生产 `docker-compose.yml` 将 `.env` 中的 `SESSION_SECRET` 传入后端容器，并使用 `${SESSION_SECRET:?...}` 拒绝缺失或空值。未配置固定密钥时，程序每次启动会生成随机值，使旧登录凭证无法校验；数据库会话记录不会因此自动变成已撤销，可能仍出现在活跃设备列表中。
+
+部署时执行一次 `openssl rand -hex 32`，将生成值填写到 Compose 同目录 `.env` 的 `SESSION_SECRET=...`，长期保留且不要提交到版本库。首次配置固定值会使此前登录失效一次。之后保持密钥、数据库及其他认证配置不变，正常服务重启不应使未到期且未撤销的会话失效。
+
+更新 `.env` 和 Compose 配置后，在部署目录执行 `docker compose up -d --no-deps --force-recreate new-api`，只重新创建后端容器并加载环境变量，不重建数据库服务。`docker restart` 或 `docker compose restart` 不会重新加载修改后的 `.env`。此后正常重启无需重新生成密钥。
+
 ## 多节点 Redis 拓扑
 
 多节点部署必须共用同一主数据库。登录 Session、账户级活跃 Session 上限和签发窗口计数都以数据库为权威，因此这些限制在应用节点间全局生效。Redis 中的 Session Hash（包含 `revoking`/`revoked` tombstone）只是缓存，其 TTL 为 Session 剩余寿命与有效 `SYNC_FREQUENCY` 中的较小值；`SYNC_FREQUENCY` 默认及非法值回退均为 `60` 秒。读取缓存不会续期，过期后会按 SID 回源数据库。延迟完成的 active 缓存回写只能使用其数据库观察窗口尚未消耗的 TTL，不能在撤销 tombstone 到期后重新启动一个完整缓存周期。
