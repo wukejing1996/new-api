@@ -8,16 +8,14 @@ type Store interface {
 }
 
 type Sample struct {
-	// Temporary correlation field for PERF_DIAG logs; remove after investigation.
-	diagnosticRequestID string
-	Model               string
-	Group               string
-	LatencyMs           int64
-	TtftMs              int64
-	HasTtft             bool
-	Success             bool
-	OutputTokens        int64
-	GenerationMs        int64
+	Model        string
+	Group        string
+	LatencyMs    int64
+	TtftMs       int64
+	HasTtft      bool
+	Success      bool
+	OutputTokens int64
+	GenerationMs int64
 }
 
 type QueryParams struct {

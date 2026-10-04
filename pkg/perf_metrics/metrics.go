@@ -3,7 +3,6 @@ package perfmetrics
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -26,34 +25,16 @@ var hotBuckets sync.Map
 const seriesSchema = "dbcd0a3c01b55203"
 
 func Init() {
-	setting := perf_metrics_setting.GetSetting()
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=init enabled=%t flush_interval_minutes=%d bucket_time=%q retention_days=%d", setting.Enabled, perf_metrics_setting.GetFlushIntervalMinutes(), setting.BucketTime, setting.RetentionDays))
 	go flushLoop()
 }
 
 // RecordRelayResult samples one finished relay exactly once, at the request
 // boundary, regardless of how many channel attempts it took.
 func RecordRelayResult(ctx context.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) {
-	requestID := ""
-	var contextErr error
-	if ctx != nil {
-		requestID, _ = ctx.Value(common.RequestIdKey).(string)
-		contextErr = ctx.Err()
-	}
 	if info == nil {
-		common.SysLog(fmt.Sprintf("PERF_DIAG stage=relay_skip request_id=%q reason=missing_relay_info", requestID))
 		return
 	}
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=relay_enter request_id=%q model=%q group=%q enabled=%t stream=%t context_err=%v business_rejection=%t api_error=%t", requestID, info.OriginModelName, info.UsingGroup, perf_metrics_setting.GetSetting().Enabled, info.IsStream, contextErr, info.PerformanceBusinessRejection, apiErr != nil))
 	outcome := ClassifyRelayOutcome(ctx, info, apiErr)
-	stream := info.StreamStatus.OutcomeSnapshot()
-	errorCode, errorType, protocolErrorType, errorStatus := "", "", "", 0
-	if apiErr != nil {
-		root := rootAPIError(apiErr)
-		errorCode, errorType, errorStatus = string(root.GetErrorCode()), string(root.GetErrorType()), root.StatusCode
-		protocolErrorType = root.ToOpenAIError().Type
-	}
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=classified request_id=%q model=%q group=%q outcome=%s context_err=%v business_rejection=%t error_code=%q error_type=%q protocol_error_type=%q error_status=%d api_error_canceled=%t stream_response=%q stream_end=%q stream_errors=%t stream_error_code=%q stream_error_type=%q stream_error_status=%d incomplete_reason=%q", requestID, info.OriginModelName, info.UsingGroup, outcome, contextErr, info.PerformanceBusinessRejection, errorCode, errorType, protocolErrorType, errorStatus, errors.Is(apiErr, context.Canceled), stream.Response, stream.EndReason, stream.HasErrors, stream.ErrorCode, stream.ErrorType, stream.ErrorStatus, stream.IncompleteReason))
 	if outcome == OutcomeIgnored {
 		return
 	}
@@ -72,15 +53,14 @@ func RecordRelayResult(ctx context.Context, info *relaycommon.RelayInfo, apiErr 
 		generationMs = latencyMs
 	}
 	Record(Sample{
-		diagnosticRequestID: requestID,
-		Model:               info.OriginModelName,
-		Group:               info.UsingGroup,
-		LatencyMs:           latencyMs,
-		TtftMs:              ttftMs,
-		HasTtft:             hasTtft,
-		Success:             outcome == OutcomeSuccess,
-		OutputTokens:        info.PerformanceOutputTokens,
-		GenerationMs:        generationMs,
+		Model:        info.OriginModelName,
+		Group:        info.UsingGroup,
+		LatencyMs:    latencyMs,
+		TtftMs:       ttftMs,
+		HasTtft:      hasTtft,
+		Success:      outcome == OutcomeSuccess,
+		OutputTokens: info.PerformanceOutputTokens,
+		GenerationMs: generationMs,
 	})
 }
 
@@ -105,7 +85,6 @@ func RecordTaskResult(task *model.Task, result *relaycommon.TaskInfo) {
 		Group:   task.Group,
 		Success: task.Status == model.TaskStatusSuccess,
 	}
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=task_enter task_id=%d model=%q group=%q enabled=%t status=%q", task.ID, sample.Model, sample.Group, perf_metrics_setting.GetSetting().Enabled, task.Status))
 	if task.SubmitTime > 0 && endTs > task.SubmitTime {
 		sample.LatencyMs = (endTs - task.SubmitTime) * 1000
 	}
@@ -123,7 +102,6 @@ func RecordTaskResult(task *model.Task, result *relaycommon.TaskInfo) {
 func Record(sample Sample) {
 	setting := perf_metrics_setting.GetSetting()
 	if !setting.Enabled || sample.Model == "" {
-		common.SysLog(fmt.Sprintf("PERF_DIAG stage=record_skip request_id=%q model=%q group=%q enabled=%t empty_model=%t", sample.diagnosticRequestID, sample.Model, sample.Group, setting.Enabled, sample.Model == ""))
 		return
 	}
 	if sample.Group == "" {
@@ -138,11 +116,8 @@ func Record(sample Sample) {
 		group:    sample.Group,
 		bucketTs: bucketStart(time.Now().Unix()),
 	}
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=memory_write_begin request_id=%q model=%q group=%q bucket_ts=%d success=%t", sample.diagnosticRequestID, key.model, key.group, key.bucketTs, sample.Success))
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
-	snapshot := actual.(*atomicBucket).snapshot()
-	common.SysLog(fmt.Sprintf("PERF_DIAG stage=memory_written request_id=%q model=%q group=%q bucket_ts=%d request_count=%d success_count=%d latency_ms=%d output_tokens=%d", sample.diagnosticRequestID, key.model, key.group, key.bucketTs, snapshot.requestCount, snapshot.successCount, sample.LatencyMs, sample.OutputTokens))
 	gopool.Go(func() {
 		recordRedis(key, sample)
 	})
