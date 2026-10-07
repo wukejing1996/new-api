@@ -1,9 +1,11 @@
 package helper
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -13,6 +15,47 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// A disconnected client must not stop upstream usage collection. Keep this
+// writer until the handler returns so no pooled Gin context outlives its owner.
+type streamResponseWriter struct {
+	gin.ResponseWriter
+	ctx          context.Context
+	disconnected atomic.Bool
+}
+
+func (w *streamResponseWriter) detached() bool {
+	if w.ctx.Err() != nil {
+		w.disconnected.Store(true)
+	}
+	return w.disconnected.Load()
+}
+
+func (w *streamResponseWriter) Write(data []byte) (int, error) {
+	if w.detached() {
+		return len(data), nil
+	}
+	n, err := w.ResponseWriter.Write(data)
+	if err != nil {
+		w.disconnected.Store(true)
+		return len(data), nil
+	}
+	return n, nil
+}
+
+func (w *streamResponseWriter) WriteString(data string) (int, error) {
+	return w.Write([]byte(data))
+}
+
+func (w *streamResponseWriter) Flush() {
+	if !w.detached() {
+		w.ResponseWriter.Flush()
+	}
+}
+
+func (w *streamResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
 
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
@@ -26,7 +69,7 @@ func FlushWriter(c *gin.Context) (err error) {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return nil
 	}
 
 	flusher, ok := c.Writer.(http.Flusher)
@@ -39,10 +82,18 @@ func FlushWriter(c *gin.Context) (err error) {
 }
 
 func requestContextDone(c *gin.Context) bool {
+	if c != nil {
+		if writer, ok := c.Writer.(*streamResponseWriter); ok {
+			return writer.detached()
+		}
+	}
 	return c != nil && c.Request != nil && c.Request.Context().Err() != nil
 }
 
 func SetEventStreamHeaders(c *gin.Context) {
+	if _, ok := c.Writer.(*streamResponseWriter); !ok && c.Request != nil {
+		c.Writer = &streamResponseWriter{ResponseWriter: c.Writer, ctx: c.Request.Context()}
+	}
 	// 检查是否已经设置过头部
 	if _, exists := c.Get("event_stream_headers_set"); exists {
 		return
@@ -86,7 +137,7 @@ func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return nil
 	}
 
 	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
@@ -100,7 +151,7 @@ func StringData(c *gin.Context, str string) error {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return nil
 	}
 
 	c.Render(-1, common.CustomEvent{Data: "data: " + str})
@@ -113,7 +164,7 @@ func PingData(c *gin.Context) error {
 	}
 
 	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+		return nil
 	}
 
 	if _, err := c.Writer.Write([]byte(": PING\n\n")); err != nil {

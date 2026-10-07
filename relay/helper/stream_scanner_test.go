@@ -211,12 +211,12 @@ func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 	assert.Equal(t, "{\"trimmed\":true}", got)
 }
 
-// TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns pins the
-// disconnect contract: when the client goes away, the handler must return
-// promptly (all goroutines joined, so the gin.Context can never leak into a
-// pooled reuse), the upstream body must be closed to stop token generation,
-// and no data received after the disconnect may be processed or written.
-func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T) {
+// Continue consuming billable events after a client disconnect, without
+// writing more data to that client or releasing the Gin context prematurely.
+func TestStreamScannerHandler_ClientCancelDrainsUpstream(t *testing.T) {
+	previousTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 0
+	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -260,27 +260,55 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 	}
 
 	cancel()
-
-	// The handler must return without any further upstream input: cleanup
-	// closes resp.Body, which unblocks the scanner goroutine.
+	select {
+	case <-done:
+		t.Fatal("handler returned before upstream completed its usage")
+	default:
+	}
+	_, err = fmt.Fprint(pw, "data: second\n")
+	require.NoError(t, err, "client disconnect must not close upstream")
+	_, err = fmt.Fprint(pw, "data: [DONE]\n")
+	require.NoError(t, err)
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("handler did not return after client disconnect")
+		t.Fatal("handler did not finish after upstream completed")
 	}
 
-	// Upstream read side must be closed so the provider stops generating
-	// (and billing) for a request nobody is listening to.
-	_, err = fmt.Fprint(pw, "data: second\n")
-	require.ErrorIs(t, err, io.ErrClosedPipe, "upstream body should be closed after client disconnect")
-
-	assert.Equal(t, int64(1), count.Load(), "no chunk after disconnect should be processed")
+	assert.Equal(t, int64(2), count.Load(), "billable events after disconnect must be processed")
 	require.NotNil(t, info.StreamStatus)
-	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.False(t, info.StreamStatus.HasErrors())
 
 	body := recorder.Body.String()
 	assert.Contains(t, body, "first")
 	assert.NotContains(t, body, "second")
+}
+
+type disconnectedStreamWriter struct {
+	gin.ResponseWriter
+}
+
+func (w *disconnectedStreamWriter) Write([]byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+func TestStreamScannerHandler_WriteFailureStillCollectsUsage(t *testing.T) {
+	previousTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 0
+	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: first\ndata: usage\ndata: [DONE]\n"))
+	c.Writer = &disconnectedStreamWriter{ResponseWriter: c.Writer}
+	var events []string
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		events = append(events, data)
+		if err := StringData(c, data); err != nil {
+			sr.Stop(err)
+		}
+	})
+	assert.Equal(t, []string{"first", "usage"}, events)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.False(t, info.StreamStatus.HasErrors())
 }
 
 // ---------- Ping tests ----------
@@ -289,9 +317,12 @@ func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	setting := operation_setting.GetGeneralSetting()
 	oldEnabled := setting.PingIntervalEnabled
 	oldSeconds := setting.PingIntervalSeconds
-	setting.PingIntervalEnabled = true
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 0
+	setting.PingIntervalEnabled = false
 	setting.PingIntervalSeconds = 1
 	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
 		setting.PingIntervalEnabled = oldEnabled
 		setting.PingIntervalSeconds = oldSeconds
 	})

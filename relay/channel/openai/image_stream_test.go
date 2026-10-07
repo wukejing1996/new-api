@@ -41,7 +41,7 @@ func newImageTestContext(t *testing.T, body, contentType string, isStream bool) 
 
 func TestImageExpressionUsesCompletedCountAndProtectsAbortedStreams(t *testing.T) {
 	oldTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 30
+	constant.StreamingTimeout = 1
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 	for _, tc := range []struct {
 		name, body      string
@@ -54,7 +54,7 @@ func TestImageExpressionUsesCompletedCountAndProtectsAbortedStreams(t *testing.T
 		{"JSON object data counts one image", `{"data":{"url":"https://example.com/a.png","b64_json":"first"}}`, false, false, 3, 1},
 		{"JSON wrapped as SSE counts object data once", `{"data":{"b64_json":"first"}}`, true, false, 3, 1},
 		{"completed stream refunds missing images", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\ndata: [DONE]\n\n", true, false, 3, 1},
-		{"client abort cannot reduce count", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n", true, true, 3, 3},
+		{"stalled upstream after client abort cannot reduce count", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n", true, true, 3, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			contentType := "application/json"
@@ -325,18 +325,15 @@ func newDisconnectingImageStream(t *testing.T, sseBody, disconnectAfter string) 
 	return c, recorder, resp, info
 }
 
-// TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount guards the
-// billing invariant: completed-event counting must not lower the charge when
-// the client aborts the stream. Upstream already generated (and charged for)
-// all requested images, so a disconnect after the first completed event keeps
-// the requested n instead of dropping it to 1.
+// Keep the reserved image count if upstream stalls before completion, even
+// after the client has gone away. Only a finished upstream can lower it.
 func TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() { gin.SetMode(oldMode) })
 
 	oldTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 30
+	constant.StreamingTimeout = 1
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
 	body := "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n"
@@ -349,25 +346,20 @@ func TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount(t *testing.
 	require.Nil(t, err)
 	require.NotNil(t, usage)
 	require.NotNil(t, info.StreamStatus)
-	// A client abort surfaces as client_gone (main-loop ctx watch) or
-	// handler_stop (failed client write); both must be treated as untrusted.
-	require.Contains(t,
-		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
-		info.StreamStatus.EndReason)
+	require.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
 	require.Contains(t, recorder.Body.String(), `"b64_json":"first"`)
 	require.Equal(t, 3.0, info.PriceData.OtherRatios()["n"], "client abort must not reduce the billed image count")
 }
 
-// TestOpenaiImageStreamHandlerClientDisconnectRaisesCount covers the other
-// direction of the abort guard: when completed events already exceed the
-// recorded n, the higher actual count is billed even though the client aborted.
+// Collect every completed image after disconnection and bill the full actual
+// count, including images never delivered to the client.
 func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() { gin.SetMode(oldMode) })
 
 	oldTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 30
+	constant.StreamingTimeout = 0
 	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
 
 	body := strings.Join([]string{
@@ -375,9 +367,13 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 		``,
 		`data: {"type":"image_generation.completed","b64_json":"second"}`,
 		``,
+		`data: {"type":"image_generation.completed","b64_json":"third"}`,
+		``,
+		`data: [DONE]`,
 		``,
 	}, "\n")
 	c, _, resp, info := newDisconnectingImageStream(t, body, "second")
+	resp.Body = io.NopCloser(strings.NewReader(body))
 	info.PriceData.UsePrice = true
 	info.PriceData.AddOtherRatio("n", 1)
 
@@ -386,10 +382,8 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, usage)
 	require.NotNil(t, info.StreamStatus)
-	require.Contains(t,
-		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
-		info.StreamStatus.EndReason)
-	require.Equal(t, 2.0, info.PriceData.OtherRatios()["n"], "completed events beyond the recorded n must raise the charge even on abort")
+	require.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	require.Equal(t, 3.0, info.PriceData.OtherRatios()["n"], "bill all upstream images after client disconnection")
 }
 
 // TestOpenaiImageStreamHandlerWrapsJSONResponse covers the non-SSE fallback:

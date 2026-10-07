@@ -407,11 +407,19 @@ func newResponsesWSBillingTest(t *testing.T, expression string, handle func(*web
 		c.Set(common.RequestIdKey, "responses-ws-billing")
 		ResponsesWebSocket(c)
 	})
-	engine.POST("/v1/responses", middleware.TokenAuth(), middleware.ModelRequestRateLimit(), middleware.Distribute(), func(c *gin.Context) {
-		defer func() { fixture.httpDone <- struct{}{} }()
-		c.Set(common.RequestIdKey, "responses-http-billing")
-		Relay(c, types.RelayFormatOpenAIResponses)
-	})
+	for _, route := range []struct {
+		path   string
+		format types.RelayFormat
+	}{
+		{"/v1/responses", types.RelayFormatOpenAIResponses},
+		{"/v1/chat/completions", types.RelayFormatOpenAI},
+	} {
+		engine.POST(route.path, middleware.TokenAuth(), middleware.ModelRequestRateLimit(), middleware.Distribute(), func(c *gin.Context) {
+			defer func() { fixture.httpDone <- struct{}{} }()
+			c.Set(common.RequestIdKey, "responses-http-billing")
+			Relay(c, route.format)
+		})
+	}
 	gateway := httptest.NewServer(engine)
 	fixture.gatewayURL = gateway.URL
 	t.Cleanup(gateway.Close)
@@ -719,31 +727,93 @@ func TestResponsesWebSocketDialsNativeResponsesChannelTypes(t *testing.T) {
 	}
 }
 
-func TestResponsesWebSocketDisconnectSettlesDeliveredOutputOnce(t *testing.T) {
-	fixture := newResponsesWSBillingTest(t, `tier("output", c * 2)`, func(ws *websocket.Conn, _ *http.Request) {
-		if _, _, err := ws.ReadMessage(); !assert.NoError(t, err) {
-			return
-		}
-		for _, event := range []string{
-			`{"type":"response.created","response":{"id":"partial","status":"in_progress"}}`,
-			`{"type":"response.output_text.delta","delta":"hello"}`,
-		} {
-			if !assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(event))) {
-				return
+func TestResponsesDisconnectDrainsAndSettlesFullUpstreamUsageOnce(t *testing.T) {
+	for _, transport := range []string{"sse", "chat", "websocket"} {
+		t.Run(transport, func(t *testing.T) {
+			release := make(chan struct{})
+			var released sync.Once
+			defer released.Do(func() { close(release) })
+			events := []string{
+				`{"type":"response.created","response":{"id":"partial","status":"in_progress"}}`,
+				`{"type":"response.output_text.delta","delta":"hello"}`,
 			}
-		}
-		_, _, _ = ws.ReadMessage()
-	})
-	require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"ws-billing","input":"hi","max_output_tokens":1}`)))
-	assert.Equal(t, "response.created", readResponsesWSTestEvent(t, fixture.client)["type"])
-	delta := readResponsesWSTestEvent(t, fixture.client)
-	require.Equal(t, "response.output_text.delta", delta["type"])
-	assert.Equal(t, "hello", delta["delta"])
-	fixture.closeAndWait(t)
-	assertResponsesWSAccounting(t, fixture, []int{1})
-	keys, err := common.RDB.Keys(context.Background(), "perf:ws-billing:*").Result()
-	require.NoError(t, err)
-	assert.Empty(t, keys, "client cancellation must not affect model health")
+			terminal := `{"type":"response.completed","response":{"id":"partial","status":"completed","usage":{"input_tokens":1000,"output_tokens":2000,"total_tokens":3000}}}`
+			if transport == "chat" {
+				events = []string{
+					`{"id":"partial","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"}}]}`,
+					`{"id":"partial","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" more"}}]}`,
+				}
+				terminal = `{"id":"partial","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":2000,"total_tokens":3000}}`
+			}
+			fixture := newResponsesWSBillingTest(t, `tier("output", c * 2)`, func(ws *websocket.Conn, _ *http.Request) {
+				if _, _, err := ws.ReadMessage(); !assert.NoError(t, err) {
+					return
+				}
+				for _, event := range events {
+					if !assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(event))) {
+						return
+					}
+				}
+				<-release
+				assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(terminal)))
+				_, _, _ = ws.ReadMessage()
+			})
+			constant.StreamingTimeout = 0
+			fixture.httpUpstream = func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				for _, event := range events {
+					_, _ = fmt.Fprintf(w, "data: %s\n\n", event)
+				}
+				w.(http.Flusher).Flush()
+				<-release
+				_, _ = fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", terminal)
+			}
+			if transport == "websocket" {
+				require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"ws-billing","input":"hi"}`)))
+				assert.Equal(t, "response.created", readResponsesWSTestEvent(t, fixture.client)["type"])
+				assert.Equal(t, "response.output_text.delta", readResponsesWSTestEvent(t, fixture.client)["type"])
+				require.NoError(t, fixture.client.Close())
+			} else {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				path, body := "/v1/responses", `{"model":"ws-billing","input":"hi","stream":true}`
+				if transport == "chat" {
+					path, body = "/v1/chat/completions", `{"model":"ws-billing","messages":[{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true}}`
+				}
+				request, err := http.NewRequestWithContext(ctx, http.MethodPost, fixture.gatewayURL+path, strings.NewReader(body))
+				require.NoError(t, err)
+				request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
+				request.Header.Set("Content-Type", "application/json")
+				response, err := http.DefaultClient.Do(request)
+				require.NoError(t, err)
+				reader := bufio.NewReader(response.Body)
+				for {
+					line, err := reader.ReadString('\n')
+					require.NoError(t, err)
+					if strings.Contains(line, "hello") {
+						break
+					}
+				}
+				cancel()
+				require.NoError(t, response.Body.Close())
+			}
+			released.Do(func() { close(release) })
+			if transport != "websocket" {
+				select {
+				case <-fixture.httpDone:
+				case <-time.After(3 * time.Second):
+					t.Fatal("SSE settlement did not complete")
+				}
+			}
+			fixture.closeAndWait(t)
+			assertResponsesWSAccounting(t, fixture, []int{2000})
+			var log model.Log
+			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).First(&log).Error)
+			assert.Equal(t, 1000, log.PromptTokens)
+			assert.Equal(t, 2000, log.CompletionTokens)
+			assert.NotContains(t, log.Other, "context canceled")
+		})
+	}
 }
 
 func TestResponsesWebSocketCancelErrorDoesNotFinishActiveRequest(t *testing.T) {

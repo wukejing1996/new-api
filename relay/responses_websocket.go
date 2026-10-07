@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -95,6 +96,7 @@ type responsesWSSession struct {
 	requestID      string
 	nextEventIndex int
 	workers        sync.WaitGroup
+	clientGone     atomic.Bool
 
 	clientWriteMu sync.Mutex
 	targetWriteMu sync.Mutex
@@ -117,7 +119,7 @@ type responsesWSSession struct {
 }
 
 func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner ResponsesWSRequestRunner) *types.NewAPIError {
-	ctx, cancel := context.WithCancel(c.Request.Context())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(c.Request.Context()))
 	s := &responsesWSSession{ctx: ctx, cancel: cancel, client: client, runner: runner,
 		request: c.Request.Clone(ctx), requestID: c.GetString(common.RequestIdKey)}
 	if s.requestID == "" {
@@ -129,9 +131,35 @@ func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner Res
 	}
 	client.SetReadLimit(int64(maxMB) << 20)
 	defer func() {
+		// A socket close is not a provider cancellation. Drain the active call
+		// before closing its upstream connection and releasing billing state.
+		s.detachClient()
+		if state := s.getCurrent(); state != nil {
+			<-state.done
+		}
 		s.shutdown()
 		s.workers.Wait()
 	}()
+	if interval := helper.StreamPingInterval(false); interval > 0 {
+		s.workers.Go(func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if s.clientGone.Load() {
+						return
+					}
+					if err := client.WriteControl(websocket.PingMessage, nil, time.Now().Add(responsesWSWriteTimeout)); err != nil {
+						s.detachClient()
+						return
+					}
+				case <-s.ctx.Done():
+					return
+				}
+			}
+		})
+	}
 
 	for {
 		_, message, err := client.ReadMessage()
@@ -192,7 +220,7 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		}
 		s.clientWriteMu.Lock()
 		s.stateMu.Lock()
-		if outgoing != nil {
+		if outgoing != nil && !s.clientGone.Load() {
 			if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
 				state.closeAfter = true
 			} else if err := s.client.WriteMessage(outgoing.kind, outgoing.body); err != nil {
@@ -238,7 +266,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if info == nil && modelName != "" {
 			info = &relaycommon.RelayInfo{OriginModelName: modelName, UsingGroup: common.GetContextKeyString(c, appconstant.ContextKeyUsingGroup), StartTime: started}
 		}
-		perfmetrics.RecordRelayResult(c.Request.Context(), info, apiErr)
+		if !s.clientGone.Load() {
+			perfmetrics.RecordRelayResult(c.Request.Context(), info, apiErr)
+		}
 		// Settlement already marks the request policy successful, and nothing
 		// reads a termination decision after this point on the WebSocket path,
 		// so neither policy record belongs here.
@@ -361,11 +391,13 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	info.StreamStatus.RequireTerminal()
 	common.SetContextKey(c, appconstant.ContextKeyResponseStreamStatus, info.StreamStatus)
 	timeout := time.Duration(appconstant.StreamingTimeout) * time.Second
-	if timeout <= 0 {
-		timeout = 300 * time.Second
+	var idle *time.Timer
+	var idleTimeout <-chan time.Time
+	if timeout > 0 {
+		idle = time.NewTimer(timeout)
+		idleTimeout = idle.C
+		defer idle.Stop()
 	}
-	idle := time.NewTimer(timeout)
-	defer idle.Stop()
 	accepted := false
 	var pendingControl []byte
 	var sentControl []byte
@@ -373,7 +405,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	for {
 		select {
 		case incoming := <-state.inbox:
-			idle.Reset(timeout)
+			if idle != nil {
+				idle.Reset(timeout)
+			}
 			if incoming.err != nil {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, incoming.err)
 				state.closeAfter = true
@@ -487,7 +521,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				s.shutdown()
 			}
 			sentControl = control.body
-		case <-idle.C:
+		case <-idleTimeout:
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, context.DeadlineExceeded)
 			state.closeAfter = true
 			ConsumeResponsesQuota(c, info, accumulator.Finish())
@@ -702,10 +736,22 @@ func (s *responsesWSSession) writeTarget(kind int, message []byte) error {
 func (s *responsesWSSession) writeClient(kind int, message []byte) error {
 	s.clientWriteMu.Lock()
 	defer s.clientWriteMu.Unlock()
-	if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
-		return err
+	if s.clientGone.Load() {
+		return nil
 	}
-	return s.client.WriteMessage(kind, message)
+	if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
+		s.detachClient()
+		return nil
+	}
+	if err := s.client.WriteMessage(kind, message); err != nil {
+		s.detachClient()
+	}
+	return nil
+}
+
+func (s *responsesWSSession) detachClient() {
+	s.clientGone.Store(true)
+	_ = s.client.Close()
 }
 
 func (s *responsesWSSession) sendError(eventID, streamID string, apiErr *types.NewAPIError) {

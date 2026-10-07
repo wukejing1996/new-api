@@ -264,7 +264,6 @@ func TestAwsHandlersCancelSdkRequestAndSkipRetry(t *testing.T) {
 		handle  func(*gin.Context, *relaycommon.RelayInfo, *Adaptor) (*relaytypes.NewAPIError, *dto.Usage)
 	}{
 		{name: "non-stream", request: newAwsInvokeModelInput(), handle: awsHandler},
-		{name: "stream", request: newAwsStreamInput(), handle: awsStreamHandler},
 		{name: "nova", request: newAwsInvokeModelInput(), handle: handleNovaRequest},
 	}
 
@@ -357,7 +356,7 @@ func TestAwsStreamHandlerUsesFinalUpstreamUsage(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "[DONE]")
 }
 
-func TestAwsStreamHandlerStopsAtClientCancellation(t *testing.T) {
+func TestAwsStreamHandlerDrainsAfterClientCancellation(t *testing.T) {
 	originalRelayTimeout := common.RelayTimeout
 	common.RelayTimeout = 0
 	t.Cleanup(func() {
@@ -428,25 +427,34 @@ func TestAwsStreamHandlerStopsAtClientCancellation(t *testing.T) {
 		t.Fatal("partial response was not written")
 	}
 	cancelRequest()
+	require.NoError(t, upstreamContext.Err())
+	select {
+	case result := <-results:
+		t.Fatalf("stream returned before final upstream usage: %v", result.err)
+	default:
+	}
+	release()
 
 	var result handlerResult
 	select {
 	case result = <-results:
 	case <-time.After(5 * time.Second):
-		t.Fatal("stream handler did not stop after client cancellation")
+		t.Fatal("stream handler did not finish after upstream completion")
 	}
 
-	require.ErrorIs(t, upstreamContext.Err(), context.Canceled)
 	require.Nil(t, result.err)
 	require.NotNil(t, result.usage)
+	require.NotNil(t, result.usage.BillingUsage)
+	require.NotNil(t, result.usage.BillingUsage.ClaudeUsage)
+	assert.Equal(t, 100, result.usage.BillingUsage.ClaudeUsage.InputTokens)
+	assert.Equal(t, 423, result.usage.BillingUsage.ClaudeUsage.OutputTokens)
 	assert.Equal(t, bodyLengthBeforeCancel, responseWriter.Body.Len())
 	assert.NotContains(t, responseWriter.Body.String(), "[DONE]")
 
-	release()
 	select {
 	case producerErr := <-producerResults:
-		require.Error(t, producerErr)
+		require.NoError(t, producerErr)
 	case <-time.After(5 * time.Second):
-		t.Fatal("upstream producer did not observe the closed stream")
+		t.Fatal("upstream producer did not finish")
 	}
 }

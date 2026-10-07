@@ -80,6 +80,20 @@ func ExtendWriteDeadline(c *gin.Context) {
 	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
 }
 
+// Unlimited streams keep proxies alive even when an older saved setting
+// disabled pings. Providers with incompatible stream framing can opt out.
+func StreamPingInterval(disabled bool) time.Duration {
+	settings := operation_setting.GetGeneralSetting()
+	if disabled || (!settings.PingIntervalEnabled && constant.StreamingTimeout > 0) {
+		return 0
+	}
+	interval := time.Duration(settings.PingIntervalSeconds) * time.Second
+	if interval <= 0 || (constant.StreamingTimeout <= 0 && interval > DefaultPingInterval) {
+		return DefaultPingInterval
+	}
+	return interval
+}
+
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
 
 	if resp == nil || dataHandler == nil {
@@ -92,11 +106,16 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	ctx, cancel := context.WithCancel(context.Background())
 
 	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
+	var ticker *time.Ticker
+	var timeout <-chan time.Time
+	if streamingTimeout > 0 {
+		ticker = time.NewTicker(streamingTimeout)
+		timeout = ticker.C
+	}
 
 	var (
 		stopChan    = make(chan bool, 3) // 增加缓冲区避免阻塞
 		scanner     = NewStreamScanner(resp.Body)
-		ticker      = time.NewTicker(streamingTimeout)
 		pingTicker  *time.Ticker
 		writeMutex  sync.Mutex     // Mutex to protect concurrent writes
 		wg          sync.WaitGroup // 用于等待所有 goroutine 退出
@@ -110,12 +129,8 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		})
 	}
 
-	generalSettings := operation_setting.GetGeneralSetting()
-	pingEnabled := generalSettings.PingIntervalEnabled && !info.DisablePing
-	pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-	if pingInterval <= 0 {
-		pingInterval = DefaultPingInterval
-	}
+	pingInterval := StreamPingInterval(info.DisablePing)
+	pingEnabled := pingInterval > 0
 
 	if pingEnabled {
 		pingTicker = time.NewTicker(pingInterval)
@@ -135,7 +150,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				_ = resp.Body.Close()
 			}
 
-			ticker.Stop()
+			if ticker != nil {
+				ticker.Stop()
+			}
 			if pingTicker != nil {
 				pingTicker.Stop()
 			}
@@ -166,11 +183,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				wg.Done()
 			}()
 
-			// 添加超时保护，防止 goroutine 无限运行
-			maxPingDuration := 30 * time.Minute // 最大 ping 持续时间
-			pingTimeout := time.NewTimer(maxPingDuration)
-			defer pingTimeout.Stop()
-
 			for {
 				select {
 				case <-pingTicker.C:
@@ -183,7 +195,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					}()
 					if err != nil {
 						logger.LogError(c, "ping data error: "+err.Error())
-						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonPingFail, err)
 						return
 					}
 					logger.LogDebug(c, "ping data sent")
@@ -193,9 +204,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 					return
 				case <-c.Request.Context().Done():
 					// 监听客户端断开连接
-					return
-				case <-pingTimeout.C:
-					logger.LogError(c, "ping goroutine max duration reached")
 					return
 				}
 			}
@@ -253,7 +261,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
-			ticker.Reset(streamingTimeout)
+			if ticker != nil {
+				ticker.Reset(streamingTimeout)
+			}
 			data := scanner.Text()
 			logger.LogDebug(c, "stream scanner data: %s", data)
 
@@ -297,14 +307,10 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 
 	// 主循环等待完成或超时
 	select {
-	case <-ticker.C:
+	case <-timeout:
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 	case <-stopChan:
 		// EndReason already set by the goroutine that triggered stopChan
-	case <-c.Request.Context().Done():
-		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
-		// 避免为已放弃的请求继续消费上游 token。
-		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
 	}
 
 	cleanup()
