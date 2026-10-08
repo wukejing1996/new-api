@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ func TestPublishedBlogListUsesSeparateCoverEndpoint(t *testing.T) {
 		Title:       "Cached cover",
 		ContentHTML: "<p>Body</p>",
 		CoverImage:  dataURL,
+		OGImage:     dataURL,
 		Status:      model.BlogPostStatusPublished,
 		PublishedAt: 1,
 	}
@@ -60,6 +62,96 @@ func TestPublishedBlogListUsesSeparateCoverEndpoint(t *testing.T) {
 	require.Equal(t, "image/png", coverRecorder.Header().Get("Content-Type"))
 	require.Equal(t, "public, max-age=31536000, immutable", coverRecorder.Header().Get("Cache-Control"))
 	require.Equal(t, imageData, coverRecorder.Body.Bytes())
+}
+
+func TestAdminBlogListSeparatesImagesAndPreservesStatusFilters(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.BlogPost{}))
+	imageData := []byte("private-cover-bytes")
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imageData)
+	for _, status := range []string{model.BlogPostStatusDraft, model.BlogPostStatusPublished} {
+		post := model.BlogPost{Slug: status, Title: status, ContentHTML: "<p>Body</p>", Status: status, CoverImage: dataURL, OGImage: dataURL}
+		require.NoError(t, db.Create(&post).Error)
+	}
+
+	for _, status := range []string{"", model.BlogPostStatusDraft, model.BlogPostStatusPublished} {
+		t.Run("status="+status, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/blog/admin/posts?view=list&page_size=100&status="+status, nil)
+			AdminListBlogPosts(c)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.NotContains(t, recorder.Body.String(), dataURL)
+			require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+			var response publishedBlogListResponse
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			require.True(t, response.Success)
+			if status == "" {
+				require.Len(t, response.Data.Items, 2)
+			} else {
+				require.Len(t, response.Data.Items, 1)
+				require.Equal(t, status, response.Data.Items[0].Status)
+			}
+			for _, item := range response.Data.Items {
+				require.True(t, item.HasCoverImage)
+				require.Empty(t, item.CoverImage)
+				require.Empty(t, item.OGImage)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name    string
+		handler gin.HandlerFunc
+		code    int
+	}{
+		{"public", GetPublishedBlogPostCover, http.StatusNotFound},
+		{"admin", AdminGetBlogPostCover, http.StatusOK},
+	} {
+		t.Run("draft-cover-"+tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Params = gin.Params{{Key: "id", Value: "1"}}
+			c.Request = httptest.NewRequest(http.MethodGet, "/covers/1", nil)
+			tc.handler(c)
+			require.Equal(t, tc.code, recorder.Code)
+			require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+			if tc.code == http.StatusOK {
+				require.Equal(t, imageData, recorder.Body.Bytes())
+			} else {
+				require.NotContains(t, recorder.Body.String(), string(imageData))
+			}
+		})
+	}
+
+	// The default view remains compatible with other management clients.
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/blog/admin/posts", nil)
+	AdminListBlogPosts(c)
+	require.Contains(t, recorder.Body.String(), dataURL)
+}
+
+func TestBlogCoverRejectsAnonymousAndInvalidIDs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	admin := r.Group("/api/blog/admin", middleware.AdminAuth())
+	admin.GET("/covers/:id", AdminGetBlogPostCover)
+	recorder := httptest.NewRecorder()
+	r.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/blog/admin/covers/1", nil))
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	for _, id := range []string{"0", "-1", "invalid"} {
+		for _, handler := range []gin.HandlerFunc{GetPublishedBlogPostCover, AdminGetBlogPostCover} {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Params = gin.Params{{Key: "id", Value: id}}
+			c.Request = httptest.NewRequest(http.MethodGet, "/covers/"+id, nil)
+			handler(c)
+			require.Equal(t, http.StatusNotFound, recorder.Code)
+			require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+		}
+	}
 }
 
 func TestBlogViewCountIsInitializedOnlyOnFirstPublish(t *testing.T) {

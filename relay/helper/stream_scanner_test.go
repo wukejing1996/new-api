@@ -215,7 +215,7 @@ func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 // writing more data to that client or releasing the Gin context prematurely.
 func TestStreamScannerHandler_ClientCancelDrainsUpstream(t *testing.T) {
 	previousTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 0
+	constant.StreamingTimeout = 43200
 	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

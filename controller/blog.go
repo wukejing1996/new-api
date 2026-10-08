@@ -43,13 +43,22 @@ func GetPublishedBlogPost(c *gin.Context) {
 }
 
 func GetPublishedBlogPostCover(c *gin.Context) {
+	getBlogPostCover(c, true)
+}
+
+func AdminGetBlogPostCover(c *gin.Context) {
+	getBlogPostCover(c, false)
+}
+
+func getBlogPostCover(c *gin.Context, publishedOnly bool) {
+	c.Header("Cache-Control", "private, no-store")
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article cover not found"})
 		return
 	}
 
-	dataURL, err := model.GetPublishedBlogPostCover(id)
+	dataURL, err := model.GetBlogPostCover(id, publishedOnly)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article cover not found"})
@@ -65,7 +74,9 @@ func GetPublishedBlogPostCover(c *gin.Context) {
 		return
 	}
 
-	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	if publishedOnly {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	}
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Data(http.StatusOK, contentType, imageData)
 }
@@ -115,12 +126,14 @@ func RecordPublishedBlogPostView(c *gin.Context) {
 }
 
 func AdminListBlogPosts(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
 	pageInfo := common.GetPageQuery(c)
 	posts, total, err := model.AdminListBlogPosts(model.AdminBlogPostQuery{
-		Status:  c.Query("status"),
-		Keyword: c.Query("keyword"),
-		Offset:  pageInfo.GetStartIdx(),
-		Limit:   pageInfo.GetPageSize(),
+		Status:   c.Query("status"),
+		Keyword:  c.Query("keyword"),
+		Offset:   pageInfo.GetStartIdx(),
+		Limit:    pageInfo.GetPageSize(),
+		ListView: c.Query("view") == "list",
 	})
 	if err != nil {
 		common.ApiError(c, err)

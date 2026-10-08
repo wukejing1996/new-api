@@ -76,10 +76,11 @@ type BlogPostListItem struct {
 }
 
 type AdminBlogPostQuery struct {
-	Status  string
-	Keyword string
-	Offset  int
-	Limit   int
+	Status   string
+	Keyword  string
+	Offset   int
+	Limit    int
+	ListView bool
 }
 
 type BlogPostSort string
@@ -199,12 +200,15 @@ func GetPublishedBlogPost(slug string) (*BlogPost, error) {
 	return &post, nil
 }
 
-func GetPublishedBlogPostCover(id int) (string, error) {
+func GetBlogPostCover(id int, publishedOnly bool) (string, error) {
 	var post BlogPost
-	if err := DB.Model(&BlogPost{}).
+	query := DB.Model(&BlogPost{}).
 		Select("cover_image").
-		Where("id = ? AND status = ?", id, BlogPostStatusPublished).
-		First(&post).Error; err != nil {
+		Where("id = ?", id)
+	if publishedOnly {
+		query = query.Where("status = ?", BlogPostStatusPublished)
+	}
+	if err := query.First(&post).Error; err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(post.CoverImage) == "" {
@@ -255,7 +259,7 @@ func AdminListBlogPosts(params AdminBlogPostQuery) ([]BlogPostListItem, int64, e
 	if limit <= 0 {
 		limit = common.ItemsPerPage
 	}
-	err := query.Select(blogPostListSelect(true)).
+	err := query.Select(blogPostListSelect(!params.ListView)).
 		Offset(params.Offset).
 		Limit(limit).
 		Order("updated_at desc, id desc").
@@ -355,9 +359,9 @@ func IsBlogPostSlugConflict(err error) bool {
 }
 
 func blogPostListSelect(includeCoverImage bool) []string {
-	fields := []string{"id", "slug", "title", "excerpt", "CASE WHEN cover_image IS NOT NULL AND cover_image <> '' THEN TRUE ELSE FALSE END AS has_cover_image", "status", "published_at", "author_id", "view_count", "seo_title", "seo_description", "canonical_url", "og_image", "keywords", "created_at", "updated_at"}
+	fields := []string{"id", "slug", "title", "excerpt", "CASE WHEN cover_image IS NOT NULL AND cover_image <> '' THEN TRUE ELSE FALSE END AS has_cover_image", "status", "published_at", "author_id", "view_count", "created_at", "updated_at"}
 	if includeCoverImage {
-		fields = append(fields, "cover_image")
+		fields = append(fields, "cover_image", "seo_title", "seo_description", "canonical_url", "og_image", "keywords")
 	}
 	return fields
 }

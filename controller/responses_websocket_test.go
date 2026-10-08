@@ -758,7 +758,7 @@ func TestResponsesDisconnectDrainsAndSettlesFullUpstreamUsageOnce(t *testing.T) 
 				assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(terminal)))
 				_, _, _ = ws.ReadMessage()
 			})
-			constant.StreamingTimeout = 0
+			constant.StreamingTimeout = 43200
 			fixture.httpUpstream = func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				for _, event := range events {

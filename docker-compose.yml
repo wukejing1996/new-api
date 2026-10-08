@@ -41,7 +41,7 @@ services:
       - NODE_NAME=new-api-node-1  # 节点名称，用于审计日志中标识节点身份；多节点/容器部署时建议设置 (Node name used in audit logs; recommended when running multiple instances or in containers)
       - RELAY_TIMEOUT=0
       - RELAY_RESPONSE_HEADER_TIMEOUT=0
-      - STREAMING_TIMEOUT=0  # No upstream idle timeout; drain disconnected streams for billing.
+      - STREAMING_TIMEOUT=43200  # 12-hour upstream idle timeout; drain disconnected streams for billing.
 #      - RELAY_IDLE_CONN_TIMEOUT=90  # Relay HTTP 客户端空闲连接超时时间，单位秒，默认跟随 Go 标准库，设置为0表示不限制 (Relay HTTP client idle keep-alive timeout in seconds, defaults to Go standard library; set 0 to disable)
       - SESSION_SECRET=${SESSION_SECRET:?Set a persistent random SESSION_SECRET in .env}  # Keep unchanged across restarts; use the same value on every node.
 #      - SESSION_COOKIE_SECURE=true  # true：启用 Secure Refresh Cookie 和严格 refresh/logout OriginGuard；false/未配置：关闭 OriginGuard，仅用于本地 HTTP (true: Secure cookie + strict refresh/logout OriginGuard; false/unset: guard disabled for local HTTP only)
