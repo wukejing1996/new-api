@@ -3,11 +3,13 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -48,7 +50,6 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 	// All keys and models for this user share a counter, including Auto keys.
 	key := fmt.Sprintf("rateLimit:userGroupModel:v1:%d", userID)
 	allowed := false
-	retryAfter := rule.DurationSeconds
 	if common.RedisEnabled {
 		if common.RDB == nil {
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_check_failed")
@@ -59,16 +60,30 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_check_failed")
 			return true
 		}
-		allowed, retryAfter = values[0] == 1, values[1]
+		allowed = values[0] == 1
 	} else {
 		// Cleanup must never evict an active, long-period rule early.
 		userGroupMemoryRateLimiter.Init(time.Duration(setting.MaxUserGroupRateLimitDurationSeconds) * time.Second)
 		allowed = userGroupMemoryRateLimiter.Request(key, rule.MaxRequests, rule.DurationSeconds)
 	}
 	if !allowed {
-		c.Header("Retry-After", strconv.FormatInt(retryAfter, 10))
-		// This abort helper writes one runtime log, never a model usage/error log.
-		abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("user group %q request limit reached: at most %d requests within %d seconds", group, rule.MaxRequests, rule.DurationSeconds))
+		// Keep policy details in one runtime log, never in the public response
+		// or a model usage/error log. No Retry-After reveals the policy window.
+		_, preparedPluginRoute := c.Get(pluginruntime.ContextKeyRouteRequest)
+		if !preparedPluginRoute || !RespondTaskPluginError(c, &dto.TaskError{
+			Message:    "Rate limit exceeded",
+			StatusCode: http.StatusTooManyRequests,
+		}) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": gin.H{
+					"message": "Rate limit exceeded",
+					"type":    "new_api_error",
+					"code":    "",
+				},
+			})
+		}
+		c.Abort()
+		logger.LogError(c.Request.Context(), fmt.Sprintf("user %d | user group %q request limit reached: at most %d requests within %d seconds", userID, group, rule.MaxRequests, rule.DurationSeconds))
 		return true
 	}
 	c.Next()

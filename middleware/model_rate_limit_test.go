@@ -88,8 +88,8 @@ func TestUserGroupRateLimitAdmissionAndPriority(t *testing.T) {
 			}
 			limited := performRateLimitRequest(router, "/default/completed", "127.0.0.1:1000")
 			assert.Equal(t, http.StatusTooManyRequests, limited.Code, "a second key is rejected while the first request is still pending")
-			assert.NotEmpty(t, limited.Header().Get("Retry-After"))
-			assert.Contains(t, limited.Body.String(), "High Risk")
+			assert.Empty(t, limited.Header().Get("Retry-After"), "the response must not expose the policy window")
+			assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, limited.Body.String())
 			assert.EqualValues(t, 1, reached.Load(), "rejection must not reach downstream processing or its usage logging")
 			close(release)
 			<-finished
