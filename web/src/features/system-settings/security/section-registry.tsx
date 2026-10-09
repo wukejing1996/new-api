@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { RateLimitSection } from '../request-limits/rate-limit-section'
+import { UserGroupRateLimitSection } from '../request-limits/user-group-rate-limit-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
 import { TokenLimitSection } from '../request-limits/token-limit-section'
 import type { SecuritySettings } from '../types'
@@ -41,6 +42,13 @@ const SECURITY_SECTIONS = [
     ),
   },
 
+  {
+    id: 'user-group-rate-limit',
+    titleKey: 'User Group Rate Limits',
+    build: (settings: SecuritySettings) => (
+      <UserGroupRateLimitSection defaultValue={settings.UserGroupRateLimit} />
+    ),
+  },
   {
     id: 'ssrf',
     titleKey: 'SSRF Protection',

@@ -381,6 +381,11 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case setting.UserGroupRateLimitOptionKey:
+		if _, err := setting.ParseUserGroupRateLimitConfig(option.Value.(string)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	case "AutomaticDisableStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {

@@ -1,0 +1,206 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { api } from '@/lib/api'
+
+import { SettingsPageProvider } from '../../components/settings-page-context'
+import {
+  createUserGroupRateLimitSchema,
+  parseUserGroupRateLimit,
+} from '../lib/user-group-rate-limit'
+import { UserGroupRateLimitSection } from '../user-group-rate-limit-section'
+
+vi.mock('@/lib/api', () => ({ api: { get: vi.fn(), put: vi.fn() } }))
+
+const empty = '{"enabled":false,"groups":{}}'
+
+function Fixture(props: { initial?: string }) {
+  const [actions, setActions] = useState<HTMLDivElement | null>(null)
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      })
+  )
+  return (
+    <QueryClientProvider client={client}>
+      <SettingsPageProvider actionsContainer={actions}>
+        <div ref={setActions} />
+        <UserGroupRateLimitSection defaultValue={props.initial ?? empty} />
+      </SettingsPageProvider>
+    </QueryClientProvider>
+  )
+}
+
+beforeEach(() => {
+  vi.mocked(api.get).mockResolvedValue({
+    data: { success: true, data: ['default', 'High Risk'] },
+  })
+  vi.mocked(api.put).mockResolvedValue({ data: { success: true } })
+})
+
+describe('user group rate limits', () => {
+  it('selects a user group and saves an independent one-hour rule', async () => {
+    const user = userEvent.setup()
+    render(<Fixture />)
+    expect(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    ).toBeDisabled()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add group' })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    await user.click(screen.getByRole('combobox', { name: 'User Group' }))
+    await user.click(screen.getByRole('option', { name: 'High Risk' }))
+    expect(screen.getByRole('combobox', { name: 'Period Unit' })).toHaveValue(
+      'Hours'
+    )
+    expect(
+      screen.getByRole('spinbutton', { name: 'Limit Period' })
+    ).toHaveValue(1)
+    await user.click(
+      screen.getByRole('switch', { name: 'Enable user group rate limits' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value:
+          '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Save user group rate limits' })
+      ).toBeDisabled()
+    )
+  })
+
+  it('loads a saved rule and persists deletion', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":7200,"max_requests":2}}}' />
+    )
+    expect(screen.getByRole('combobox', { name: 'User Group' })).toHaveValue(
+      'High Risk'
+    )
+    expect(
+      screen.getByRole('spinbutton', { name: 'Limit Period' })
+    ).toHaveValue(2)
+    expect(
+      screen.getByRole('spinbutton', { name: 'Max Requests (incl. failures)' })
+    ).toHaveValue(2)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value: '{"enabled":true,"groups":{}}',
+      })
+    )
+  })
+
+  it('rejects periods above 30 days without saving', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":86400,"max_requests":1}}}' />
+    )
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Limit Period' }), {
+      target: { value: '31' },
+    })
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    expect(
+      await screen.findByText('The maximum period is 30 days.')
+    ).toBeVisible()
+    expect(api.put).not.toHaveBeenCalled()
+  })
+
+  it('preserves edits when saving fails and allows a retry', async () => {
+    vi.mocked(api.put).mockResolvedValueOnce({
+      data: { success: false, message: 'Save rejected' },
+    })
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}' />
+    )
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Max Requests (incl. failures)' }),
+      { target: { value: '2' } }
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+    expect(
+      screen.getByRole('spinbutton', { name: 'Max Requests (incl. failures)' })
+    ).toHaveValue(2)
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Save user group rate limits' })
+      ).toBeEnabled()
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2))
+  })
+
+  it('offers a retry when group loading fails and disables adding rules', async () => {
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('Offline'))
+    render(<Fixture />)
+    expect(await screen.findByText('Failed to load groups')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add group' })).toBeDisabled()
+  })
+
+  it('refuses corrupt configuration instead of offering to save an empty replacement', () => {
+    render(<Fixture initial='{"groups":null}' />)
+    expect(
+      screen.getByText('Failed to load user group rate limits')
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Save user group rate limits' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('rejects duplicate groups and fractional limits', () => {
+    const schema = createUserGroupRateLimitSchema((key) => key)
+    const values = parseUserGroupRateLimit(
+      '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}'
+    )
+    values.rules.push({ ...values.rules[0] })
+    expect(schema.safeParse(values).success).toBe(false)
+    values.rules.pop()
+    values.rules[0].maxRequests = 1.5
+    expect(schema.safeParse(values).success).toBe(false)
+  })
+})
