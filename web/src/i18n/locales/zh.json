@@ -409,7 +409,7 @@
     "All conditions": "全部满足",
     "All conditions must match before this tier is used.": "所有条件都匹配后才会使用此阶梯。",
     "All edits are overwrite operations. Leave fields empty to keep current values unchanged.": "所有编辑都是覆盖操作。留空字段将保持当前值不变。",
-    "All enabled users with email addresses": "所有已启用且有邮箱地址的用户",
+    "All users with email addresses (including disabled accounts)": "所有有邮箱地址的用户（包括已禁用账户）",
     "All files exceed the maximum size.": "所有文件都超过最大尺寸。",
     "All group names live here. Ratio applies when calls are billed as this group; top-up ratio applies to users whose account is in this group.": "所有分组名称都在这里管理。倍率在调用按该分组计费时生效；充值倍率对所属该分组的用户生效。",
     "All Groups": "所有分组",

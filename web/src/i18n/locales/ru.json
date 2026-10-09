@@ -409,7 +409,7 @@
     "All conditions": "Все условия",
     "All conditions must match before this tier is used.": "Все условия должны совпасть, прежде чем будет использован этот уровень.",
     "All edits are overwrite operations. Leave fields empty to keep current values unchanged.": "Все изменения являются операциями перезаписи. Оставьте поля пустыми, чтобы сохранить текущие значения без изменений.",
-    "All enabled users with email addresses": "Все активные пользователи с адресом электронной почты",
+    "All users with email addresses (including disabled accounts)": "Все пользователи с адресом электронной почты (включая отключённые аккаунты)",
     "All files exceed the maximum size.": "Все файлы превышают максимальный размер.",
     "All group names live here. Ratio applies when calls are billed as this group; top-up ratio applies to users whose account is in this group.": "Все названия групп управляются здесь. Коэффициент применяется, когда вызовы тарифицируются по этой группе; коэффициент пополнения применяется к пользователям, состоящим в этой группе.",
     "All Groups": "Все группы",

@@ -140,7 +140,7 @@ func getEmailBroadcastUsers(target EmailBroadcastTarget) ([]model.User, error) {
 	query := model.DB.
 		Model(&model.User{}).
 		Select("id", "email").
-		Where("status = ? AND email <> ?", common.UserStatusEnabled, "").
+		Where("email <> ?", "").
 		Order("id asc")
 
 	switch targetType {

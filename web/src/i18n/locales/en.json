@@ -409,7 +409,7 @@
     "All conditions": "All conditions",
     "All conditions must match before this tier is used.": "All conditions must match before this tier is used.",
     "All edits are overwrite operations. Leave fields empty to keep current values unchanged.": "All edits are overwrite operations. Leave fields empty to keep current values unchanged.",
-    "All enabled users with email addresses": "All enabled users with email addresses",
+    "All users with email addresses (including disabled accounts)": "All users with email addresses (including disabled accounts)",
     "All files exceed the maximum size.": "All files exceed the maximum size.",
     "All group names live here. Ratio applies when calls are billed as this group; top-up ratio applies to users whose account is in this group.": "All group names live here. Ratio applies when calls are billed as this group; top-up ratio applies to users whose account is in this group.",
     "All Groups": "All Groups",

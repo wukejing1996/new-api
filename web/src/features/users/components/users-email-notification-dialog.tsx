@@ -65,7 +65,7 @@ function buildDisplayName(user: User) {
 }
 
 function canEmailUser(user: User) {
-  return user.status === USER_STATUS.ENABLED && !!user.email?.trim()
+  return !!user.email?.trim()
 }
 
 function buildPreviewSrcDoc(content: string) {
@@ -310,7 +310,9 @@ export function UsersEmailNotificationDialog() {
                         {t('All users')}
                       </span>
                       <span className='text-muted-foreground block text-xs'>
-                        {t('All enabled users with email addresses')}
+                        {t(
+                          'All users with email addresses (including disabled accounts)'
+                        )}
                       </span>
                     </span>
                   </label>
@@ -404,9 +406,10 @@ export function UsersEmailNotificationDialog() {
                                   {user.email || t('No email address')}
                                 </span>
                               </span>
-                              {!canSelect && (
+                              {(!canSelect ||
+                                user.status === USER_STATUS.DISABLED) && (
                                 <Badge variant='secondary' className='shrink-0'>
-                                  {user.email ? t('Disabled') : t('No email')}
+                                  {canSelect ? t('Disabled') : t('No email')}
                                 </Badge>
                               )}
                             </label>
