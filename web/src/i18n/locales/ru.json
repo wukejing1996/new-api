@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "Статистика ограничений",
+    "Refresh counts": "Обновить статистику",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Накопленные ответы и отклонения 429 по группам пользователей. Счётчики не зависят от периода ограничения и включают ранее настроенные группы.",
+    "Failed to load rate limit counts": "Не удалось загрузить статистику ограничений",
+    "Total successful custom replies": "Всего успешных настроенных ответов",
+    "Total 429 rejections": "Всего отклонений 429",
+    "No rate limit events counted yet.": "События ограничения пока не зарегистрированы.",
+    "Successful custom replies": "Успешные настроенные ответы",
+    "429 rejections": "Отклонения 429",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redis не включён. Статистика ограничений недоступна.",
     "Custom over-limit reply": "Ответ при превышении лимита",
     "Configure reply": "Настроить ответ",
     "Enable custom over-limit reply": "Включить ответ при превышении лимита",

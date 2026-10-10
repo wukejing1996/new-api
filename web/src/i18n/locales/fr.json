@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "Statistiques de limitation",
+    "Refresh counts": "Actualiser les statistiques",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Réponses personnalisées et rejets 429 cumulés par groupe. Ces compteurs sont indépendants de la période de limitation et incluent les groupes précédemment configurés.",
+    "Failed to load rate limit counts": "Échec du chargement des statistiques de limitation",
+    "Total successful custom replies": "Total des réponses personnalisées réussies",
+    "Total 429 rejections": "Total des rejets 429",
+    "No rate limit events counted yet.": "Aucun événement de limitation comptabilisé.",
+    "Successful custom replies": "Réponses personnalisées réussies",
+    "429 rejections": "Rejets 429",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redis n’est pas activé. Les statistiques de limitation sont indisponibles.",
     "Custom over-limit reply": "Réponse personnalisée après dépassement",
     "Configure reply": "Configurer la réponse",
     "Enable custom over-limit reply": "Activer la réponse personnalisée après dépassement",

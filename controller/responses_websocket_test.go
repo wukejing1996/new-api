@@ -25,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/alicebob/miniredis/v2"
@@ -252,6 +253,10 @@ func TestResponsesWebSocketUserGroupCustomReply(t *testing.T) {
 	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {
 		t.Error("a local rate-limit reply must not connect to upstream")
 	})
+	redisServer := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	common.RedisEnabled, common.RDB = true, client
 	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":true,"groups":{"default":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Please contact support"}}}`))
 	runner, _ := newResponsesWSTestRunner(t, fixture.token)
 	admitted := 0
@@ -282,6 +287,10 @@ func TestResponsesWebSocketUserGroupCustomReply(t *testing.T) {
 		assert.Equal(t, "Please contact support", text.String())
 	}
 	assert.Zero(t, fixture.connections.Load())
+	require.Eventually(t, func() bool {
+		stats, err := service.GetUserGroupRateLimitStats(context.Background())
+		return err == nil && stats.Counts["default"] == 2 && len(stats.RejectedCounts) == 0
+	}, time.Second, time.Millisecond, "each successfully sent WebSocket terminal event counts exactly once")
 	var logs int64
 	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("token_id = ?", fixture.token.Id).Count(&logs).Error)
 	assert.Zero(t, logs, "local replies must not create usage or error logs")

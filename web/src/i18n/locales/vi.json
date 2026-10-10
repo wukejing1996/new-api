@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "Thống kê giới hạn",
+    "Refresh counts": "Làm mới thống kê",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Tổng phản hồi tùy chỉnh và yêu cầu bị chặn với 429 theo nhóm người dùng. Số đếm độc lập với khoảng giới hạn và bao gồm các nhóm đã cấu hình trước đây.",
+    "Failed to load rate limit counts": "Không thể tải thống kê giới hạn",
+    "Total successful custom replies": "Tổng phản hồi tùy chỉnh thành công",
+    "Total 429 rejections": "Tổng số lần chặn 429",
+    "No rate limit events counted yet.": "Chưa có sự kiện giới hạn nào được ghi nhận.",
+    "Successful custom replies": "Phản hồi tùy chỉnh thành công",
+    "429 rejections": "Số lần chặn 429",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redis chưa được bật. Không có thống kê giới hạn.",
     "Custom over-limit reply": "Phản hồi tùy chỉnh khi vượt giới hạn",
     "Configure reply": "Cấu hình phản hồi",
     "Enable custom over-limit reply": "Bật phản hồi tùy chỉnh khi vượt giới hạn",

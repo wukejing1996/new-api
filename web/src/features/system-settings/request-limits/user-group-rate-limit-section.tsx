@@ -50,6 +50,7 @@ import {
   type UserGroupRateLimitFormValues,
 } from './lib/user-group-rate-limit'
 import { UserGroupRateLimitEditor } from './user-group-rate-limit-editor'
+import { UserGroupRateLimitStats } from './user-group-rate-limit-stats'
 
 export function UserGroupRateLimitSection(props: { defaultValue: string }) {
   const { t } = useTranslation()
@@ -177,6 +178,7 @@ export function UserGroupRateLimitSection(props: { defaultValue: string }) {
           </div>
         </SettingsForm>
       </Form>
+      <UserGroupRateLimitStats />
     </SettingsSection>
   )
 }

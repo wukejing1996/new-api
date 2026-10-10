@@ -63,13 +63,121 @@ function Fixture(props: { initial?: string }) {
 }
 
 beforeEach(() => {
-  vi.mocked(api.get).mockResolvedValue({
-    data: { success: true, data: ['default', 'High Risk'] },
-  })
+  vi.mocked(api.get).mockImplementation(async (path) => ({
+    data: {
+      success: true,
+      data:
+        path === '/api/option/user_group_rate_limit/stats'
+          ? { redis_enabled: true, counts: {}, rejected_counts: {} }
+          : ['default', 'High Risk'],
+    },
+  }))
   vi.mocked(api.put).mockResolvedValue({ data: { success: true } })
 })
 
 describe('user group rate limits', () => {
+  it('queries cumulative custom replies and 429 counts and refreshes without saving edits', async () => {
+    const user = userEvent.setup()
+    let counts = {
+      redis_enabled: true,
+      counts: { 'High Risk': 7 },
+      rejected_counts: { 'High Risk': 3, 'Former Group': 2 },
+    }
+    vi.mocked(api.get).mockImplementation(async (path) => ({
+      data: {
+        success: true,
+        data:
+          path === '/api/option/user_group_rate_limit/stats'
+            ? counts
+            : ['default', 'High Risk'],
+      },
+    }))
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}' />
+    )
+    const stats = screen.getByRole('region', { name: 'Rate limit counts' })
+    expect(
+      await within(stats).findByText('Total successful custom replies: 7')
+    ).toBeVisible()
+    expect(within(stats).getByText('Total 429 rejections: 5')).toBeVisible()
+    const risk = within(stats).getByRole('row', { name: 'High Risk 7 3' })
+    expect(risk).toBeVisible()
+    expect(
+      within(stats).getByRole('row', { name: 'Former Group 0 2' })
+    ).toBeVisible()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Limit Period' }), {
+      target: { value: '2' },
+    })
+    counts = {
+      redis_enabled: true,
+      counts: { 'High Risk': 8 },
+      rejected_counts: { 'High Risk': 4, 'Former Group': 2 },
+    }
+    await user.click(
+      within(stats).getByRole('button', { name: 'Refresh counts' })
+    )
+    expect(
+      await within(stats).findByText('Total successful custom replies: 8')
+    ).toBeVisible()
+    expect(within(stats).getByText('Total 429 rejections: 6')).toBeVisible()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Limit Period' })
+    ).toHaveValue(2)
+    expect(api.put).not.toHaveBeenCalled()
+  })
+
+  it('shows unavailable statistics when Redis is disabled instead of displaying zero', async () => {
+    vi.mocked(api.get).mockImplementation(async (path) => ({
+      data: {
+        success: true,
+        data:
+          path === '/api/option/user_group_rate_limit/stats'
+            ? { redis_enabled: false, counts: {}, rejected_counts: {} }
+            : ['default', 'High Risk'],
+      },
+    }))
+    render(<Fixture />)
+    expect(
+      await screen.findByText(
+        'Redis is not enabled. Rate limit counts are unavailable.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByText('Total 429 rejections: 0')
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows statistics query errors and allows a retry', async () => {
+    const user = userEvent.setup()
+    let offline = true
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path === '/api/option/user_group_rate_limit/stats' && offline) {
+        throw new Error('Redis unavailable')
+      }
+      return {
+        data: {
+          success: true,
+          data:
+            path === '/api/option/user_group_rate_limit/stats'
+              ? { redis_enabled: true, counts: {}, rejected_counts: {} }
+              : ['default', 'High Risk'],
+        },
+      }
+    })
+    render(<Fixture />)
+    const stats = screen.getByRole('region', { name: 'Rate limit counts' })
+    expect(
+      await within(stats).findByText('Failed to load rate limit counts')
+    ).toBeVisible()
+    expect(
+      within(stats).queryByText('Total 429 rejections: 0')
+    ).not.toBeInTheDocument()
+    offline = false
+    await user.click(within(stats).getByRole('button', { name: 'Retry' }))
+    expect(
+      await within(stats).findByText('No rate limit events counted yet.')
+    ).toBeVisible()
+  })
   it('validates and saves custom reply text only after the settings page Save', async () => {
     const user = userEvent.setup()
     render(
@@ -281,7 +389,15 @@ describe('user group rate limits', () => {
   })
 
   it('offers a retry when group loading fails and disables adding rules', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('Offline'))
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path === '/api/group/') throw new Error('Offline')
+      return {
+        data: {
+          success: true,
+          data: { redis_enabled: true, counts: {}, rejected_counts: {} },
+        },
+      }
+    })
     render(<Fixture />)
     expect(await screen.findByText('Failed to load groups')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Add group' })).toBeDisabled()

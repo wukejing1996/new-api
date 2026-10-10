@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -195,6 +197,49 @@ func TestUserGroupRateLimitSlidingWindowAndConfiguration(t *testing.T) {
 
 var modelRateLimitTestUsers atomic.Int64
 
+type failedRateLimitResponseWriter struct{ *httptest.ResponseRecorder }
+
+func (w failedRateLimitResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("client connection closed")
+}
+
+func (w failedRateLimitResponseWriter) WriteString(string) (int, error) {
+	return 0, errors.New("client connection closed")
+}
+
+func TestUserGroupRateLimitFailedDeliveryDoesNotCount(t *testing.T) {
+	previousConfig := setting.UserGroupRateLimitConfigJSON()
+	previousEnabled := setting.ModelRequestRateLimitEnabled
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig))
+		setting.ModelRequestRateLimitEnabled = previousEnabled
+	})
+	for _, outcome := range []string{"json", "stream", "429"} {
+		t.Run(outcome, func(t *testing.T) {
+			useRateLimitMiniRedis(t)
+			setting.ModelRequestRateLimitEnabled = false
+			customEnabled := outcome != "429"
+			raw := fmt.Sprintf(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":%t,"custom_response_message":"Contact support"}}}`, customEnabled)
+			require.NoError(t, setting.UpdateUserGroupRateLimitConfig(raw))
+			userID := 7400000 + int(modelRateLimitTestUsers.Add(1))
+			engine := gin.New()
+			engine.POST("/v1/chat/completions", func(c *gin.Context) {
+				c.Set("id", userID)
+				common.SetContextKey(c, constant.ContextKeyUserGroup, "High Risk")
+			}, ModelRequestRateLimit(), func(c *gin.Context) { c.Status(http.StatusNoContent) })
+			request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			engine.ServeHTTP(httptest.NewRecorder(), request)
+			request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(fmt.Sprintf(`{"model":"test","stream":%t}`, outcome == "stream")))
+			request.Header.Set("Content-Type", "application/json")
+			engine.ServeHTTP(failedRateLimitResponseWriter{httptest.NewRecorder()}, request)
+			stats, err := service.GetUserGroupRateLimitStats(context.Background())
+			require.NoError(t, err)
+			assert.Empty(t, stats.Counts)
+			assert.Empty(t, stats.RejectedCounts, "failed response writes must not count as successful results")
+		})
+	}
+}
+
 func TestUserGroupRateLimitCustomResponse(t *testing.T) {
 	previousConfig := setting.UserGroupRateLimitConfigJSON()
 	previousRedis, previousEnabled := common.RedisEnabled, setting.ModelRequestRateLimitEnabled
@@ -256,6 +301,10 @@ func TestUserGroupRateLimitCustomResponse(t *testing.T) {
 				first := httptest.NewRecorder()
 				router.ServeHTTP(first, request)
 				require.Equal(t, "upstream", first.Body.String(), "enabled custom replies must never intercept requests within the limit")
+				stats, err := service.GetUserGroupRateLimitStats(context.Background())
+				require.NoError(t, err)
+				assert.Empty(t, stats.Counts, "admitted requests are not custom replies")
+				assert.Empty(t, stats.RejectedCounts)
 				if advance != nil {
 					advance()
 				}
@@ -284,6 +333,12 @@ func TestUserGroupRateLimitCustomResponse(t *testing.T) {
 					}
 				}
 				assert.Equal(t, 1, called, "local replies never enter upstream or usage logging handlers")
+				stats, err = service.GetUserGroupRateLimitStats(context.Background())
+				require.NoError(t, err)
+				if backend == "redis" {
+					assert.EqualValues(t, 2, stats.Counts["High Risk"], "each complete local reply counts once, including streaming")
+				}
+				assert.Empty(t, stats.RejectedCounts)
 				if ttl != nil {
 					assert.Equal(t, time.Hour-time.Minute, ttl(), "local replies must not refresh the rate limit expiry")
 				}
@@ -297,6 +352,12 @@ func TestUserGroupRateLimitCustomResponse(t *testing.T) {
 				router.ServeHTTP(denied, request)
 				assert.Equal(t, http.StatusTooManyRequests, denied.Code, "disabling custom replies immediately restores 429 without resetting the quota")
 				assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, denied.Body.String())
+				stats, err = service.GetUserGroupRateLimitStats(context.Background())
+				require.NoError(t, err)
+				if backend == "redis" {
+					assert.EqualValues(t, 2, stats.Counts["High Risk"])
+					assert.EqualValues(t, 1, stats.RejectedCounts["High Risk"], "429 rejections have a separate cumulative count")
+				}
 				config.Groups["High Risk"] = setting.UserGroupRateLimitRule{DurationSeconds: 3600, MaxRequests: 2}
 				encoded, err = common.Marshal(config)
 				require.NoError(t, err)

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +19,7 @@ import (
 // receive local model events without entering channel selection or billing.
 type UserGroupRateLimitResponseSinkKey struct{}
 
-func respondUserGroupRateLimit(c *gin.Context, message string) {
+func respondUserGroupRateLimit(c *gin.Context, message, group string) bool {
 	path := c.Request.URL.Path
 	target := types.RelayFormatOpenAI
 	legacy := false
@@ -35,7 +36,7 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 	default:
 		// Non-text APIs cannot represent an assistant message (e.g. embeddings).
 		c.JSON(http.StatusOK, gin.H{"message": message})
-		return
+		return len(c.Errors) == 0 && c.Request.Context().Err() == nil
 	}
 	var request struct {
 		Model         string `json:"model"`
@@ -50,7 +51,7 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 	// Only read the body after denial; admitted requests remain untouched.
 	_ = common.UnmarshalBodyReusable(c, &request)
 	defer common.CleanupBodyStorage(c)
-	sink, websocket := c.Request.Context().Value(UserGroupRateLimitResponseSinkKey{}).(func(*dto.ResponsesStreamResponse) error)
+	sink, websocket := c.Request.Context().Value(UserGroupRateLimitResponseSinkKey{}).(func(*dto.ResponsesStreamResponse, func()) error)
 	if websocket {
 		request.Stream = true
 		if request.Response != nil {
@@ -73,15 +74,17 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 		if !request.Stream {
 			response["usage"] = &dto.Usage{}
 			c.JSON(http.StatusOK, response)
-			return
+			return len(c.Errors) == 0 && c.Request.Context().Err() == nil
 		}
 		data, _ := common.Marshal(response)
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("X-Accel-Buffering", "no")
-		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\ndata: [DONE]\n\n", data)
+		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\ndata: [DONE]\n\n", data); err != nil {
+			return false
+		}
 		c.Writer.Flush()
-		return
+		return c.Request.Context().Err() == nil
 	}
 	info := &convmeta.Values{}
 	if !request.Stream {
@@ -92,17 +95,17 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 		converted, err := relayconvert.ConvertResponse(c.Request.Context(), info, target, response)
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_response_failed")
-			return
+			return false
 		}
 		c.JSON(http.StatusOK, converted.Value)
-		return
+		return len(c.Errors) == 0 && c.Request.Context().Err() == nil
 	}
 	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, target, relayconvert.ResponseStreamOptions{
 		ID: id, Model: request.Model, Created: created, IncludeUsage: request.StreamOptions.IncludeUsage, EmitSequenceNumber: true,
 	})
 	if err != nil {
 		abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_response_failed")
-		return
+		return false
 	}
 	stop := "stop"
 	chunks := []*dto.ChatCompletionsStreamResponse{
@@ -117,14 +120,14 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 		converted, convertErr := relayconvert.ConvertStreamResponseChunk(c.Request.Context(), info, state, chunk)
 		if convertErr != nil {
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_response_failed")
-			return
+			return false
 		}
 		events = append(events, converted...)
 	}
 	final, err := relayconvert.FinalizeStreamResponse(c.Request.Context(), info, state)
 	if err != nil {
 		abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_response_failed")
-		return
+		return false
 	}
 	events = append(events, final...)
 	for i := range events {
@@ -133,15 +136,17 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 		}
 	}
 	if websocket {
+		requestContext := c.Request.Context()
 		for _, event := range events {
 			if response, ok := event.Value.(*dto.ResponsesStreamResponse); ok {
-				if err := sink(response); err != nil {
-					return
+				if err := sink(response, func() { service.RecordUserGroupRateLimitResult(requestContext, group, http.StatusOK) }); err != nil {
+					return false
 				}
 			}
 		}
 		c.Status(http.StatusOK)
-		return
+		// The transport counts only after it actually writes the terminal event.
+		return false
 	}
 	if target == types.RelayFormatGemini && c.Query("alt") != "sse" {
 		values := make([]any, 0, len(events))
@@ -149,7 +154,7 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 			values = append(values, event.Value)
 		}
 		c.JSON(http.StatusOK, values)
-		return
+		return len(c.Errors) == 0 && c.Request.Context().Err() == nil
 	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -157,7 +162,7 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 	for _, event := range events {
 		data, marshalErr := common.Marshal(event.Value)
 		if marshalErr != nil {
-			return
+			return false
 		}
 		switch response := event.Value.(type) {
 		case *dto.ClaudeResponse:
@@ -166,14 +171,17 @@ func respondUserGroupRateLimit(c *gin.Context, message string) {
 			_, err = fmt.Fprintf(c.Writer, "event: %s\n", response.Type)
 		}
 		if err != nil {
-			return
+			return false
 		}
 		if _, err = fmt.Fprintf(c.Writer, "data: %s\n\n", data); err != nil {
-			return
+			return false
 		}
 	}
 	if target == types.RelayFormatOpenAI {
-		_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
+		if _, err := fmt.Fprint(c.Writer, "data: [DONE]\n\n"); err != nil {
+			return false
+		}
 	}
 	c.Writer.Flush()
+	return c.Request.Context().Err() == nil
 }

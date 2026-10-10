@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -68,7 +69,9 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 	}
 	if !allowed {
 		if rule.CustomResponseEnabled {
-			respondUserGroupRateLimit(c, rule.CustomResponseMessage)
+			if respondUserGroupRateLimit(c, rule.CustomResponseMessage, group) {
+				service.RecordUserGroupRateLimitResult(c.Request.Context(), group, http.StatusOK)
+			}
 			c.Abort()
 			logger.LogError(c.Request.Context(), fmt.Sprintf("user %d | user group %q request limit reached: custom response returned", userID, group))
 			return true
@@ -89,6 +92,9 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 			})
 		}
 		c.Abort()
+		if c.Writer.Status() == http.StatusTooManyRequests && len(c.Errors) == 0 && c.Request.Context().Err() == nil {
+			service.RecordUserGroupRateLimitResult(c.Request.Context(), group, http.StatusTooManyRequests)
+		}
 		logger.LogError(c.Request.Context(), fmt.Sprintf("user %d | user group %q request limit reached: at most %d requests within %d seconds", userID, group, rule.MaxRequests, rule.DurationSeconds))
 		return true
 	}

@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "制限の発動回数",
+    "Refresh counts": "回数を更新",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "ユーザーグループ別のカスタム応答と429拒否の累計です。制限期間でリセットされず、以前設定したグループも含まれます。",
+    "Failed to load rate limit counts": "制限回数の読み込みに失敗しました",
+    "Total successful custom replies": "カスタム応答の成功総数",
+    "Total 429 rejections": "429拒否の総数",
+    "No rate limit events counted yet.": "制限イベントはまだ記録されていません。",
+    "Successful custom replies": "カスタム応答の成功数",
+    "429 rejections": "429拒否数",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redisが有効ではないため、制限回数を取得できません。",
     "Custom over-limit reply": "制限超過時のカスタム応答",
     "Configure reply": "応答を設定",
     "Enable custom over-limit reply": "制限超過時のカスタム応答を有効にする",

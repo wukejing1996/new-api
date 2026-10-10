@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "限流觸發統計",
+    "Refresh counts": "重新整理統計",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "依使用者群組累計自訂回覆和 429 攔截次數。統計不隨限流視窗歸零，包含曾設定過的群組。",
+    "Failed to load rate limit counts": "載入限流統計失敗",
+    "Total successful custom replies": "自訂回覆成功總次數",
+    "Total 429 rejections": "429 攔截總次數",
+    "No rate limit events counted yet.": "尚無限流觸發記錄。",
+    "Successful custom replies": "自訂回覆成功次數",
+    "429 rejections": "429 攔截次數",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redis 未啟用，無法統計限流觸發次數。",
     "Custom over-limit reply": "超限自訂回覆",
     "Configure reply": "設定回覆",
     "Enable custom over-limit reply": "啟用超限自訂回覆",

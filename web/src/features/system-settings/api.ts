@@ -39,6 +39,19 @@ export async function getSystemOptions() {
   return res.data
 }
 
+export async function getUserGroupRateLimitStats() {
+  const res = await api.get<{
+    success: boolean
+    message: string
+    data: {
+      redis_enabled: boolean
+      counts: Record<string, number>
+      rejected_counts: Record<string, number>
+    }
+  }>('/api/option/user_group_rate_limit/stats')
+  return res.data
+}
+
 export async function updateSystemOption(request: UpdateOptionRequest) {
   const res = await api.put<UpdateOptionResponse>('/api/option/', request)
   return res.data

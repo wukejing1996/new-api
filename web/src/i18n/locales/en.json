@@ -1,5 +1,15 @@
 {
   "translation": {
+    "Rate limit counts": "Rate limit counts",
+    "Refresh counts": "Refresh counts",
+    "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.",
+    "Failed to load rate limit counts": "Failed to load rate limit counts",
+    "Total successful custom replies": "Total successful custom replies",
+    "Total 429 rejections": "Total 429 rejections",
+    "No rate limit events counted yet.": "No rate limit events counted yet.",
+    "Successful custom replies": "Successful custom replies",
+    "429 rejections": "429 rejections",
+    "Redis is not enabled. Rate limit counts are unavailable.": "Redis is not enabled. Rate limit counts are unavailable.",
     "Custom over-limit reply": "Custom over-limit reply",
     "Configure reply": "Configure reply",
     "Enable custom over-limit reply": "Enable custom over-limit reply",

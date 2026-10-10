@@ -80,11 +80,12 @@ type responsesWSControl struct {
 // Only the request worker reads or changes billing state. Socket readers pass
 // bounded messages to it; cancellation never performs an independent refund.
 type responsesWSCallState struct {
-	inbox      chan responsesWSMessage
-	controls   chan responsesWSControl
-	done       chan struct{}
-	terminal   *responsesWSMessage
-	closeAfter bool
+	inbox          chan responsesWSMessage
+	controls       chan responsesWSControl
+	done           chan struct{}
+	terminal       *responsesWSMessage
+	onTerminalSent func()
+	closeAfter     bool
 }
 
 type responsesWSSession struct {
@@ -220,17 +221,23 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		}
 		s.clientWriteMu.Lock()
 		s.stateMu.Lock()
+		localReplySent := false
 		if outgoing != nil && !s.clientGone.Load() {
 			if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
 				state.closeAfter = true
 			} else if err := s.client.WriteMessage(outgoing.kind, outgoing.body); err != nil {
 				state.closeAfter = true
+			} else {
+				localReplySent = apiErr == nil && state.onTerminalSent != nil
 			}
 		}
 		s.current = nil
 		close(state.done)
 		s.stateMu.Unlock()
 		s.clientWriteMu.Unlock()
+		if localReplySent {
+			state.onTerminalSent()
+		}
 		if state.closeAfter {
 			s.shutdown()
 		}
@@ -239,7 +246,7 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 	request.Body = io.NopCloser(bytes.NewReader(message))
 	request.ContentLength = int64(len(message))
 	request.Header.Set("Content-Type", "application/json")
-	request = request.WithContext(context.WithValue(request.Context(), middleware.UserGroupRateLimitResponseSinkKey{}, func(event *dto.ResponsesStreamResponse) error {
+	request = request.WithContext(context.WithValue(request.Context(), middleware.UserGroupRateLimitResponseSinkKey{}, func(event *dto.ResponsesStreamResponse, onSuccess func()) error {
 		body, err := common.Marshal(event)
 		if err != nil {
 			return err
@@ -257,6 +264,7 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		}
 		if event.Type == "response.completed" {
 			state.terminal = &responsesWSMessage{kind: websocket.TextMessage, body: body}
+			state.onTerminalSent = onSuccess
 			return nil
 		}
 		err = s.writeClient(websocket.TextMessage, body)
