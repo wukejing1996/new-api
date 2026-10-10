@@ -292,6 +292,7 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	service.QueueNewUserRegistrationNotification(&cleanUser, "password", c.ClientIP())
 	// 获取插入后的用户ID
 	var insertedUser model.User
 	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
@@ -1326,6 +1327,7 @@ type UpdateUserSettingRequest struct {
 	GotifyUrl                        string  `json:"gotify_url,omitempty"`
 	GotifyToken                      string  `json:"gotify_token,omitempty"`
 	GotifyPriority                   int     `json:"gotify_priority,omitempty"`
+	NewUserRegistrationNotifyEnabled *bool   `json:"new_user_registration_notify_enabled,omitempty"`
 	UpstreamModelUpdateNotifyEnabled *bool   `json:"upstream_model_update_notify_enabled,omitempty"`
 	AcceptUnsetModelRatioModel       bool    `json:"accept_unset_model_ratio_model"`
 	RecordIpLog                      bool    `json:"record_ip_log"`
@@ -1431,6 +1433,9 @@ func UpdateUserSetting(c *gin.Context) {
 		UpstreamModelUpdateNotifyEnabled: upstreamModelUpdateNotifyEnabled,
 		AcceptUnsetRatioModel:            req.AcceptUnsetModelRatioModel,
 		RecordIpLog:                      req.RecordIpLog,
+	}
+	if !applyRegistrationNotificationSetting(c, user, req, &settings) {
+		return
 	}
 
 	// 如果是webhook类型,添加webhook相关设置

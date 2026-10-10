@@ -105,6 +105,7 @@ func WeChatAuth(c *gin.Context) {
 				})
 				return
 			}
+			service.QueueNewUserRegistrationNotification(&user, "WeChat", c.ClientIP())
 		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

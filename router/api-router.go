@@ -197,6 +197,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.POST("/broadcast_email", controller.BroadcastEmail)
+				adminRoute.POST("/registration-notification/test", middleware.UserCriticalRateLimit("registration-notification-test"), controller.TestRegistrationNotification)
 				adminRoute.PUT("/", controller.UpdateUser)
 				adminRoute.DELETE("/:id", controller.DeleteUser)
 				adminRoute.DELETE("/:id/reset_passkey", controller.AdminResetPasskey)

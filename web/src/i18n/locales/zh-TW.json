@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Receive New User Registration Notifications": "接收新使用者註冊通知",
+    "Admins only. Receive new account details through your selected notification method after successful registration.": "僅管理員可用。新帳號註冊成功後，透過您選擇的通知方式接收帳號資訊。",
+    "Save notification settings before sending a test.": "請先儲存通知設定，再發送測試通知。",
+    "Send Test Notification": "發送測試通知",
+    "Test notification sent": "測試通知已發送",
+    "Failed to send test notification": "發送測試通知失敗",
+    "Failed to send test notification. Check your saved notification settings and server connectivity.": "發送測試通知失敗，請檢查已儲存的通知設定和伺服器網路連線。",
     "Custom reply probability (%)": "自訂回覆機率（%）",
     "Enter a whole percentage from 0 to 100.": "請輸入 0 到 100 的整數百分比。",
     "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "每個超限請求獨立隨機判斷。70% 表示有 70% 機率回傳自訂回覆、30% 機率回傳 429。0% 一律回傳 429；開啟後設定 100% 一律回傳自訂回覆。",

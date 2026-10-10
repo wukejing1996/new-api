@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Receive New User Registration Notifications": "Receive New User Registration Notifications",
+    "Admins only. Receive new account details through your selected notification method after successful registration.": "Admins only. Receive new account details through your selected notification method after successful registration.",
+    "Save notification settings before sending a test.": "Save notification settings before sending a test.",
+    "Send Test Notification": "Send Test Notification",
+    "Test notification sent": "Test notification sent",
+    "Failed to send test notification": "Failed to send test notification",
+    "Failed to send test notification. Check your saved notification settings and server connectivity.": "Failed to send test notification. Check your saved notification settings and server connectivity.",
     "Custom reply probability (%)": "Custom reply probability (%)",
     "Enter a whole percentage from 0 to 100.": "Enter a whole percentage from 0 to 100.",
     "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.",

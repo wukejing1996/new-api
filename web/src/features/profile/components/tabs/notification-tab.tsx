@@ -34,6 +34,7 @@ import { updateUserSettings } from '../../api'
 import { NOTIFICATION_METHODS } from '../../constants'
 import { normalizeUserSettings } from '../../lib/user-settings'
 import type { UserProfile, NotifyType } from '../../types'
+import { RegistrationNotificationSettings } from '../registration-notification-settings'
 
 const NOTIFICATION_ICONS: Record<NotifyType, typeof Mail> = {
   email: Mail,
@@ -291,6 +292,20 @@ export function NotificationTab({ profile, onUpdate }: NotificationTabProps) {
             {t('Configure your account behavior preferences')}
           </p>
         </div>
+
+        {isAdmin && (
+          <RegistrationNotificationSettings
+            enabled={settings.new_user_registration_notify_enabled}
+            onEnabledChange={(enabled) =>
+              updateField('new_user_registration_notify_enabled', enabled)
+            }
+            disabled={loading}
+            unsaved={
+              JSON.stringify(settings) !==
+              JSON.stringify(normalizeUserSettings(profile?.setting))
+            }
+          />
+        )}
 
         {/* Receive Upstream Model Update Notifications (admin only) */}
         {isAdmin && (

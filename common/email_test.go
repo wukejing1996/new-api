@@ -2,6 +2,7 @@ package common
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -9,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/smtp"
@@ -19,6 +21,68 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestSendEmailContextSMTPModes(t *testing.T) {
+	for _, mode := range []string{"plain", "starttls", "implicit-tls"} {
+		t.Run(mode, func(t *testing.T) {
+			withSMTPSettings(t)
+			var server *fakeSMTPServer
+			if mode == "implicit-tls" {
+				server = newFakeImplicitTLSSMTPServer(t)
+			} else {
+				server = newFakeSMTPServer(t)
+			}
+			defer server.close()
+			SMTPServer, SMTPPort = server.host, server.port
+			SMTPSSLEnabled, SMTPStartTLSEnabled = mode == "implicit-tls", mode == "starttls"
+			SMTPInsecureSkipVerify = true // The local SMTP fixture uses its own certificate.
+			SMTPAccount, SMTPFrom, SMTPToken = "sender@example.com", "sender@example.com", "secret"
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			require.NoError(t, SendEmailContext(ctx, "Registration", "receiver@example.com", "<p>New account</p>"))
+			select {
+			case message := <-server.messages:
+				require.Contains(t, message, "<p>New account</p>")
+			case <-ctx.Done():
+				t.Fatal("SMTP did not deliver the registration notification")
+			}
+		})
+	}
+}
+
+func TestSendEmailContextCancellationClosesSMTPConnection(t *testing.T) {
+	withSMTPSettings(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			accepted <- conn
+		}
+	}()
+	SMTPServer = "127.0.0.1"
+	SMTPPort = listener.Addr().(*net.TCPAddr).Port
+	SMTPSSLEnabled, SMTPStartTLSEnabled = false, false
+	SMTPAccount, SMTPFrom, SMTPToken = "sender@example.com", "sender@example.com", ""
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- SendEmailContext(ctx, "Registration", "receiver@example.com", "New account") }()
+	var conn net.Conn
+	select {
+	case conn = <-accepted:
+	case <-ctx.Done():
+		t.Fatal("SMTP connection was not established")
+	}
+	defer conn.Close()
+	cancel() // Cancel while SMTP is waiting for the server greeting.
+	require.Error(t, <-result)
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	_, err = conn.Read(make([]byte, 1))
+	require.ErrorIs(t, err, io.EOF)
+}
 
 type fakeSMTPServer struct {
 	listener          net.Listener

@@ -588,6 +588,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		user.FinalizeOAuthUserCreation(inviterId)
 	}
 
+	service.QueueNewUserRegistrationNotification(user, provider.GetName(), c.ClientIP())
 	return user, nil, nil
 }
 

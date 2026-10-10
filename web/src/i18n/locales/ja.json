@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Receive New User Registration Notifications": "新規ユーザー登録通知を受け取る",
+    "Admins only. Receive new account details through your selected notification method after successful registration.": "管理者専用です。新規登録が完了すると、選択した通知方法でアカウント情報を受け取れます。",
+    "Save notification settings before sending a test.": "テストを送信する前に通知設定を保存してください。",
+    "Send Test Notification": "テスト通知を送信",
+    "Test notification sent": "テスト通知を送信しました",
+    "Failed to send test notification": "テスト通知の送信に失敗しました",
+    "Failed to send test notification. Check your saved notification settings and server connectivity.": "テスト通知の送信に失敗しました。保存済みの通知設定とサーバーの接続を確認してください。",
     "Custom reply probability (%)": "カスタム応答の確率（%）",
     "Enter a whole percentage from 0 to 100.": "0から100までの整数の割合を入力してください。",
     "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "制限超過リクエストごとに独立して抽選します。70%では70%の確率でカスタム応答、30%の確率で429を返します。0%は常に429、有効時の100%は常にカスタム応答を返します。",

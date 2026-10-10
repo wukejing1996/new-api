@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 import type { CustomOAuthBinding } from '@/lib/oauth'
+import { ROLE } from '@/lib/roles'
 import { authRequestOptions, authResult } from '@/lib/secure-verification'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import type { LoginSession } from '@/stores/auth-store'
 
 import { normalizeUserSettings } from './lib/user-settings'
@@ -73,6 +75,11 @@ export function changeAccountPassword(
   )
 }
 
+export async function sendRegistrationNotificationTest(): Promise<ApiResponse> {
+  const res = await api.post('/api/user/registration-notification/test')
+  return requireServerSuccess(res.data)
+}
+
 /**
  * Update user settings
  */
@@ -84,7 +91,11 @@ export async function updateUserSettings(
     return { success: false, message: profile.message }
   }
   const settings = normalizeUserSettings(profile.data.setting)
-  const res = await api.put('/api/user/setting', { ...settings, ...data })
+  const payload = { ...settings, ...data }
+  if (profile.data.role < ROLE.ADMIN) {
+    payload.new_user_registration_notify_enabled = false
+  }
+  const res = await api.put('/api/user/setting', payload)
   return res.data
 }
 

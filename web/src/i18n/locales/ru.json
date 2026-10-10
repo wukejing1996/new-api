@@ -1,5 +1,12 @@
 {
   "translation": {
+    "Receive New User Registration Notifications": "Получать уведомления о новых регистрациях",
+    "Admins only. Receive new account details through your selected notification method after successful registration.": "Только для администраторов. Получайте сведения о новых аккаунтах выбранным способом после успешной регистрации.",
+    "Save notification settings before sending a test.": "Сохраните настройки уведомлений перед отправкой теста.",
+    "Send Test Notification": "Отправить тестовое уведомление",
+    "Test notification sent": "Тестовое уведомление отправлено",
+    "Failed to send test notification": "Не удалось отправить тестовое уведомление",
+    "Failed to send test notification. Check your saved notification settings and server connectivity.": "Не удалось отправить тест. Проверьте сохранённые настройки и подключение сервера.",
     "Custom reply probability (%)": "Вероятность настроенного ответа (%)",
     "Enter a whole percentage from 0 to 100.": "Введите целый процент от 0 до 100.",
     "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Каждый запрос сверх лимита выбирается независимо. 70 % означает вероятность настроенного ответа 70 % и ответа 429 — 30 %. При 0 % всегда возвращается 429; при 100 % — настроенный ответ, если он включён.",

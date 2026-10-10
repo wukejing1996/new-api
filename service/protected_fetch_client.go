@@ -101,7 +101,7 @@ func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response
 	if req == nil || req.URL == nil {
 		return nil, fmt.Errorf("invalid request")
 	}
-	if err := ValidateSSRFProtectedFetchURL(req.URL.String()); err != nil {
+	if err := validateProtectedFetchURLContext(req.Context(), req.URL.String()); err != nil {
 		return nil, err
 	}
 

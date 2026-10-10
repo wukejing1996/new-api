@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -76,6 +77,10 @@ func newSMTPClient(addr string) (*smtp.Client, error) {
 }
 
 func SendEmail(subject string, receiver string, content string) error {
+	return SendEmailContext(context.Background(), subject, receiver, content)
+}
+
+func SendEmailContext(ctx context.Context, subject string, receiver string, content string) error {
 	if SMTPFrom == "" { // for compatibility
 		SMTPFrom = SMTPAccount
 	}
@@ -99,10 +104,11 @@ func SendEmail(subject string, receiver string, content string) error {
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
 	to := strings.Split(receiver, ";")
 	var err error
-	client, err := newSMTPClient(addr)
+	client, stopCancel, err := newSMTPClientContext(ctx, addr)
 	if err != nil {
 		return err
 	}
+	defer stopCancel()
 	defer client.Close()
 	if shouldAuthenticateSMTP() {
 		if err = client.Auth(auth); err != nil {
@@ -130,7 +136,7 @@ func SendEmail(subject string, receiver string, content string) error {
 		return err
 	}
 	err = client.Quit()
-	if err != nil {
+	if _, bounded := ctx.Deadline(); err != nil && !bounded {
 		SysError(fmt.Sprintf("failed to send email to %s: %v", receiver, err))
 	}
 	return err

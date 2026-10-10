@@ -43,7 +43,7 @@ type proxyURLConfig struct {
 
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	urlStr := req.URL.String()
-	if err := validateURLWithCurrentFetchSetting(urlStr, true); err != nil {
+	if err := validateProtectedFetchURLContext(req.Context(), urlStr); err != nil {
 		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
 	}
 	if len(via) >= 10 {
@@ -54,7 +54,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 
 func checkProtectedFetchRedirect(req *http.Request, via []*http.Request) error {
 	urlStr := req.URL.String()
-	if err := ValidateSSRFProtectedFetchURL(urlStr); err != nil {
+	if err := validateProtectedFetchURLContext(req.Context(), urlStr); err != nil {
 		return fmt.Errorf("redirect to %s blocked: %v", urlStr, err)
 	}
 	if len(via) >= 10 {
@@ -70,6 +70,11 @@ func validateURLWithCurrentFetchSetting(urlStr string, applyDomainIPFilter bool)
 
 func ValidateSSRFProtectedFetchURL(urlStr string) error {
 	return validateURLWithCurrentFetchSetting(urlStr, true)
+}
+
+func validateProtectedFetchURLContext(ctx context.Context, urlStr string) error {
+	fetchSetting := system_setting.GetFetchSetting()
+	return common.ValidateURLWithFetchSettingContext(ctx, urlStr, fetchSetting.EnableSSRFProtection, fetchSetting.AllowPrivateIp, fetchSetting.DomainFilterMode, fetchSetting.IpFilterMode, fetchSetting.DomainList, fetchSetting.IpList, fetchSetting.AllowedPorts, fetchSetting.ApplyIPFilterForDomain)
 }
 
 // maxTimeoutSeconds is the largest number of seconds that still converts to a
