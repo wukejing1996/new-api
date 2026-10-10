@@ -94,7 +94,7 @@ func TestUserGroupRateLimitAdmissionAndPriority(t *testing.T) {
 			limited := performRateLimitRequest(router, "/default/completed", "127.0.0.1:1000")
 			assert.Equal(t, http.StatusTooManyRequests, limited.Code, "a second key is rejected while the first request is still pending")
 			assert.Empty(t, limited.Header().Get("Retry-After"), "the response must not expose the policy window")
-			assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, limited.Body.String())
+			assert.JSONEq(t, `{"error":{"message":"The service is currently overloaded. Please try again later.","type":"new_api_error","code":""}}`, limited.Body.String())
 			assert.EqualValues(t, 1, reached.Load(), "rejection must not reach downstream processing or its usage logging")
 			close(release)
 			<-finished
@@ -351,7 +351,7 @@ func TestUserGroupRateLimitCustomResponse(t *testing.T) {
 				denied := httptest.NewRecorder()
 				router.ServeHTTP(denied, request)
 				assert.Equal(t, http.StatusTooManyRequests, denied.Code, "disabling custom replies immediately restores 429 without resetting the quota")
-				assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, denied.Body.String())
+				assert.JSONEq(t, `{"error":{"message":"The service is currently overloaded. Please try again later.","type":"new_api_error","code":""}}`, denied.Body.String())
 				stats, err = service.GetUserGroupRateLimitStats(context.Background())
 				require.NoError(t, err)
 				if backend == "redis" {
@@ -455,7 +455,7 @@ func TestUserGroupRateLimitCustomResponseProbability(t *testing.T) {
 				if tc.status == http.StatusOK {
 					assert.Equal(t, "Contact support", gjson.Get(response.Body.String(), "choices.0.message.content").String())
 				} else {
-					assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, response.Body.String())
+					assert.JSONEq(t, `{"error":{"message":"The service is currently overloaded. Please try again later.","type":"new_api_error","code":""}}`, response.Body.String())
 				}
 				if backend == "redis" {
 					stats, err := service.GetUserGroupRateLimitStats(context.Background())

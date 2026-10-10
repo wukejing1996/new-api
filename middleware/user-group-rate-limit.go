@@ -95,14 +95,15 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 		}
 		// Keep policy details in one runtime log, never in the public response
 		// or a model usage/error log. No Retry-After reveals the policy window.
+		const message = "The service is currently overloaded. Please try again later."
 		_, preparedPluginRoute := c.Get(pluginruntime.ContextKeyRouteRequest)
 		if !preparedPluginRoute || !RespondTaskPluginError(c, &dto.TaskError{
-			Message:    "Rate limit exceeded",
+			Message:    message,
 			StatusCode: http.StatusTooManyRequests,
 		}) {
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{
-					"message": "Rate limit exceeded",
+					"message": message,
 					"type":    "new_api_error",
 					"code":    "",
 				},
