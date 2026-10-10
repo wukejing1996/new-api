@@ -135,7 +135,7 @@ export function UserGroupRateLimitSection(props: { defaultValue: string }) {
           />
           <p className='text-muted-foreground text-sm'>
             {t(
-              'Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Rejections return 429 and write only a runtime log, without a usage log.'
+              'Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.'
             )}
           </p>
           {groupsQuery.isError && (
@@ -160,6 +160,8 @@ export function UserGroupRateLimitSection(props: { defaultValue: string }) {
                   period: 1,
                   unit: 'hours',
                   maxRequests: 1,
+                  customResponseEnabled: false,
+                  customResponseMessage: '',
                 })
               }
             >

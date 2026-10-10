@@ -1,3 +1,4 @@
+import { useState } from 'react'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -32,6 +33,7 @@ import { Input } from '@/components/ui/input'
 
 import { safeNumberFieldProps } from '../utils/numeric-field'
 import type { UserGroupRateLimitFormValues } from './lib/user-group-rate-limit'
+import { UserGroupRateLimitResponseDialog } from './user-group-rate-limit-response-dialog'
 
 type Props = {
   control: Control<UserGroupRateLimitFormValues>
@@ -43,6 +45,7 @@ type Props = {
 
 export function UserGroupRateLimitEditor(props: Props) {
   const { t } = useTranslation()
+  const [responseRowId, setResponseRowId] = useState<string | null>(null)
   return (
     <StaticDataTable
       className='min-w-0'
@@ -157,6 +160,37 @@ export function UserGroupRateLimitEditor(props: Props) {
                     />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+          ),
+        },
+        {
+          id: 'customResponse',
+          header: t('Custom over-limit reply'),
+          cell: (row, index) => (
+            <FormField
+              control={props.control}
+              name={`rules.${index}.customResponseMessage`}
+              render={() => (
+                <FormItem>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    disabled={props.disabled}
+                    onClick={() => setResponseRowId(row.id)}
+                  >
+                    {t('Configure reply')}
+                  </Button>
+                  <FormMessage />
+                  {responseRowId === row.id && (
+                    <UserGroupRateLimitResponseDialog
+                      control={props.control}
+                      index={index}
+                      disabled={props.disabled}
+                      onClose={() => setResponseRowId(null)}
+                    />
+                  )}
                 </FormItem>
               )}
             />

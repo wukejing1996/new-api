@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "Réponse personnalisée après dépassement",
+    "Configure reply": "Configurer la réponse",
+    "Enable custom over-limit reply": "Activer la réponse personnalisée après dépassement",
+    "Custom reply text": "Texte de la réponse personnalisée",
+    "Custom response must be at most 4000 characters.": "La réponse personnalisée doit contenir au maximum 4000 caractères.",
+    "Custom response message is required.": "Le texte de la réponse personnalisée est obligatoire.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "Les requêtes autorisées sont transmises normalement. Après dépassement, cette option renvoie votre texte comme réponse du modèle avec HTTP 200 au lieu de 429. Cliquez sur Enregistrer dans les paramètres pour appliquer les modifications.",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "Saisissez jusqu’à 4000 caractères. Les API de chat prennent en charge les réponses normales et en flux ; les autres API renvoient un message JSON. Aucun appel en amont ni journal d’utilisation n’est créé.",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "Chaque utilisateur dispose d’un quota distinct partagé entre toutes ses clés et tous les modèles. Les requêtes sont comptées avant transmission, échecs inclus. Après dépassement, elles renvoient 429 ou une réponse personnalisée avec HTTP 200 si activée, sans appel en amont ni journal d’utilisation.",
     "Limit Period": "Période de limitation",
     "User Group Rate Limits": "Limites par groupe utilisateur",
     "Enable user group rate limits": "Activer les limites par groupe utilisateur",

@@ -239,6 +239,32 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 	request.Body = io.NopCloser(bytes.NewReader(message))
 	request.ContentLength = int64(len(message))
 	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(context.WithValue(request.Context(), middleware.UserGroupRateLimitResponseSinkKey{}, func(event *dto.ResponsesStreamResponse) error {
+		body, err := common.Marshal(event)
+		if err != nil {
+			return err
+		}
+		if create.StreamID != "" {
+			var payload map[string]any
+			if err = common.Unmarshal(body, &payload); err != nil {
+				return err
+			}
+			payload["stream_id"] = create.StreamID
+			body, err = common.Marshal(payload)
+			if err != nil {
+				return err
+			}
+		}
+		if event.Type == "response.completed" {
+			state.terminal = &responsesWSMessage{kind: websocket.TextMessage, body: body}
+			return nil
+		}
+		err = s.writeClient(websocket.TextMessage, body)
+		if err != nil {
+			state.closeAfter = true
+		}
+		return err
+	}))
 	apiErr = s.runner(request, requestID, func(c *gin.Context) *types.NewAPIError {
 		if parseErr != nil {
 			return newResponsesWSInvalidRequestError(parseErr)

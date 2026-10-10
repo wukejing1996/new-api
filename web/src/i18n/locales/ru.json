@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "Ответ при превышении лимита",
+    "Configure reply": "Настроить ответ",
+    "Enable custom over-limit reply": "Включить ответ при превышении лимита",
+    "Custom reply text": "Текст ответа",
+    "Custom response must be at most 4000 characters.": "Ответ должен содержать не более 4000 символов.",
+    "Custom response message is required.": "Укажите текст ответа.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "В пределах лимита запросы проходят как обычно. После превышения эта настройка возвращает ваш текст как ответ модели с HTTP 200 вместо 429. Нажмите «Сохранить» на странице настроек, чтобы применить изменения.",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "Введите до 4000 символов. API чата поддерживают обычные и потоковые ответы; остальные API возвращают сообщение JSON. Запрос к провайдеру и журнал использования не создаются.",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "У каждого пользователя отдельный лимит для всех ключей и моделей. Запросы учитываются до отправки, включая неудачные. При превышении возвращается 429 или настроенный ответ с HTTP 200, если включён. Запросы к провайдеру и журналы использования не создаются.",
     "Limit Period": "Период ограничения",
     "User Group Rate Limits": "Лимиты групп пользователей",
     "Enable user group rate limits": "Включить лимиты групп пользователей",

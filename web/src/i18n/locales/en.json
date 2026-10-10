@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "Custom over-limit reply",
+    "Configure reply": "Configure reply",
+    "Enable custom over-limit reply": "Enable custom over-limit reply",
+    "Custom reply text": "Custom reply text",
+    "Custom response must be at most 4000 characters.": "Custom response must be at most 4000 characters.",
+    "Custom response message is required.": "Custom response message is required.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.",
     "Limit Period": "Limit Period",
     "User Group Rate Limits": "User Group Rate Limits",
     "Enable user group rate limits": "Enable user group rate limits",

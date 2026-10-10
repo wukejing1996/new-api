@@ -67,6 +67,12 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 		allowed = userGroupMemoryRateLimiter.Request(key, rule.MaxRequests, rule.DurationSeconds)
 	}
 	if !allowed {
+		if rule.CustomResponseEnabled {
+			respondUserGroupRateLimit(c, rule.CustomResponseMessage)
+			c.Abort()
+			logger.LogError(c.Request.Context(), fmt.Sprintf("user %d | user group %q request limit reached: custom response returned", userID, group))
+			return true
+		}
 		// Keep policy details in one runtime log, never in the public response
 		// or a model usage/error log. No Retry-After reveals the policy window.
 		_, preparedPluginRoute := c.Get(pluginruntime.ContextKeyRouteRequest)

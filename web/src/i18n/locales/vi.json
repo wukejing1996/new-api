@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "Phản hồi tùy chỉnh khi vượt giới hạn",
+    "Configure reply": "Cấu hình phản hồi",
+    "Enable custom over-limit reply": "Bật phản hồi tùy chỉnh khi vượt giới hạn",
+    "Custom reply text": "Nội dung phản hồi tùy chỉnh",
+    "Custom response must be at most 4000 characters.": "Phản hồi tùy chỉnh không được vượt quá 4000 ký tự.",
+    "Custom response message is required.": "Vui lòng nhập nội dung phản hồi tùy chỉnh.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "Trong giới hạn, yêu cầu được xử lý bình thường. Khi vượt giới hạn, tùy chọn này trả văn bản của bạn dưới dạng phản hồi mô hình với HTTP 200 thay vì 429. Nhấn Lưu trên trang cài đặt để áp dụng thay đổi.",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "Nhập tối đa 4000 ký tự. API trò chuyện hỗ trợ phản hồi thường và luồng; API không phải văn bản trả thông báo JSON. Không gọi nhà cung cấp hoặc tạo nhật ký sử dụng.",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "Mỗi người dùng có giới hạn riêng, dùng chung cho mọi khóa và mô hình. Yêu cầu được tính trước khi chuyển tiếp, kể cả lỗi. Khi vượt giới hạn, trả 429 hoặc phản hồi tùy chỉnh với HTTP 200 nếu bật. Không gọi nhà cung cấp hoặc tạo nhật ký sử dụng.",
     "Limit Period": "Chu kỳ giới hạn",
     "User Group Rate Limits": "Giới hạn tốc độ theo nhóm người dùng",
     "Enable user group rate limits": "Bật giới hạn tốc độ theo nhóm người dùng",

@@ -246,6 +246,50 @@ func TestResponsesWSRequestRunnerUsesExistingMemoryRateLimit(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
+func TestResponsesWebSocketUserGroupCustomReply(t *testing.T) {
+	previousConfig := setting.UserGroupRateLimitConfigJSON()
+	t.Cleanup(func() { require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig)) })
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {
+		t.Error("a local rate-limit reply must not connect to upstream")
+	})
+	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":true,"groups":{"default":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Please contact support"}}}`))
+	runner, _ := newResponsesWSTestRunner(t, fixture.token)
+	admitted := 0
+	require.Nil(t, runner(httptest.NewRequest(http.MethodPost, "/v1/responses", nil), "admitted", func(*gin.Context) *types.NewAPIError { admitted++; return nil }))
+	require.Equal(t, 1, admitted)
+	for _, body := range []string{
+		`{"type":"response.create","stream_id":"risk-check","model":"ws-billing","input":"hello"}`,
+		`{"type":"response.create","stream_id":"risk-check","response":{"model":"ws-billing","input":"hello again"}}`,
+	} {
+		require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(body)))
+		var text strings.Builder
+		for {
+			event := readResponsesWSTestEvent(t, fixture.client)
+			assert.Equal(t, "risk-check", event["stream_id"])
+			if event["type"] == "response.output_text.delta" {
+				delta, ok := event["delta"].(string)
+				require.True(t, ok)
+				text.WriteString(delta)
+			}
+			if event["type"] == "response.completed" {
+				response, ok := event["response"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "completed", response["status"])
+				assert.Equal(t, "ws-billing", response["model"])
+				break
+			}
+		}
+		assert.Equal(t, "Please contact support", text.String())
+	}
+	assert.Zero(t, fixture.connections.Load())
+	var logs int64
+	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("token_id = ?", fixture.token.Id).Count(&logs).Error)
+	assert.Zero(t, logs, "local replies must not create usage or error logs")
+	var user model.User
+	require.NoError(t, model.DB.First(&user, fixture.user.Id).Error)
+	assert.Equal(t, fixture.user.Quota, user.Quota, "local replies must not charge quota")
+}
+
 func TestResponsesWSRequestRunnerSharesRedisSuccessLimitWithHTTP(t *testing.T) {
 	_, token := setupResponsesWSRequestTest(t)
 	redisServer := miniredis.RunT(t)

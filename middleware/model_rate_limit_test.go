@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestModelRedisRateLimitUsesUTCRegardlessOfLocalTimezone(t *testing.T) {
@@ -142,7 +145,7 @@ func TestUserGroupRateLimitAdmissionAndPriority(t *testing.T) {
 	})
 
 	t.Run("Redis unavailable", func(t *testing.T) {
-		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}`))
+		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Contact support"}}}`))
 		previousClient := common.RDB
 		common.RDB = nil
 		common.RedisEnabled = true
@@ -191,6 +194,136 @@ func TestUserGroupRateLimitSlidingWindowAndConfiguration(t *testing.T) {
 }
 
 var modelRateLimitTestUsers atomic.Int64
+
+func TestUserGroupRateLimitCustomResponse(t *testing.T) {
+	previousConfig := setting.UserGroupRateLimitConfigJSON()
+	previousRedis, previousEnabled := common.RedisEnabled, setting.ModelRequestRateLimitEnabled
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig))
+		common.RedisEnabled, setting.ModelRequestRateLimitEnabled = previousRedis, previousEnabled
+	})
+	message := "风险提示 \"retry\"\n请联系支持"
+	cases := []struct {
+		name, path, textPath, terminal string
+		stream                         bool
+	}{
+		{"chat", "/v1/chat/completions", "choices.0.message.content", "", false},
+		{"chat stream", "/v1/chat/completions", "choices.0.delta.content", "[DONE]", true},
+		{"completions", "/v1/completions", "choices.0.text", "", false},
+		{"completions stream", "/v1/completions", "choices.0.text", "[DONE]", true},
+		{"claude", "/v1/messages", "content.0.text", "", false},
+		{"claude stream", "/v1/messages", "delta.text", "message_stop", true},
+		{"responses", "/v1/responses", "output.0.content.0.text", "", false},
+		{"responses stream", "/v1/responses", "delta", "response.completed", true},
+		{"gemini", "/v1beta/models/gemini-test:generateContent", "candidates.0.content.parts.0.text", "", false},
+		{"gemini SSE", "/v1beta/models/gemini-test:streamGenerateContent?alt=sse", "candidates.0.content.parts.0.text", "STOP", true},
+		{"gemini JSON stream", "/v1beta/models/gemini-test:streamGenerateContent", "0.candidates.0.content.parts.0.text", "", false},
+		{"non-text", "/v1/embeddings", "message", "", false},
+	}
+	for _, backend := range []string{"memory", "redis"} {
+		for _, tc := range cases {
+			t.Run(backend+"/"+tc.name, func(t *testing.T) {
+				common.RedisEnabled, setting.ModelRequestRateLimitEnabled = false, false
+				var ttl func() time.Duration
+				var advance func()
+				userID := 7400000 + int(modelRateLimitTestUsers.Add(1))
+				if backend == "redis" {
+					server, _ := useRateLimitMiniRedis(t)
+					now := time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC)
+					server.SetTime(now)
+					advance = func() {
+						server.FastForward(time.Minute)
+						server.SetTime(now.Add(time.Minute))
+					}
+					ttl = func() time.Duration { return server.TTL(fmt.Sprintf("rateLimit:userGroupModel:v1:%d", userID)) }
+				}
+				config := setting.UserGroupRateLimitConfig{Enabled: true, Groups: map[string]setting.UserGroupRateLimitRule{
+					"High Risk": {DurationSeconds: 3600, MaxRequests: 1, CustomResponseEnabled: true, CustomResponseMessage: message},
+				}}
+				encoded, err := common.Marshal(config)
+				require.NoError(t, err)
+				require.NoError(t, setting.UpdateUserGroupRateLimitConfig(string(encoded)))
+				called := 0
+				router := gin.New()
+				router.POST("/*path", func(c *gin.Context) {
+					c.Set("id", userID)
+					common.SetContextKey(c, constant.ContextKeyUserGroup, "High Risk")
+					common.SetContextKey(c, constant.ContextKeyTokenGroup, "auto")
+				}, ModelRequestRateLimit(), func(c *gin.Context) { called++; c.String(http.StatusOK, "upstream") })
+				body := fmt.Sprintf(`{"model":"test-model","stream":%t,"stream_options":{"include_usage":true}}`, tc.stream)
+				request := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(body))
+				request.Header.Set("Content-Type", "application/json")
+				first := httptest.NewRecorder()
+				router.ServeHTTP(first, request)
+				require.Equal(t, "upstream", first.Body.String(), "enabled custom replies must never intercept requests within the limit")
+				if advance != nil {
+					advance()
+				}
+				for range 2 {
+					request = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(body))
+					request.Header.Set("Content-Type", "application/json")
+					response := httptest.NewRecorder()
+					router.ServeHTTP(response, request)
+					require.Equal(t, http.StatusOK, response.Code)
+					assert.Empty(t, response.Header().Get("Retry-After"))
+					if !tc.stream {
+						assert.Equal(t, message, gjson.Get(response.Body.String(), tc.textPath).String())
+					} else {
+						assert.Contains(t, response.Header().Get("Content-Type"), "text/event-stream")
+						var text strings.Builder
+						for line := range strings.SplitSeq(response.Body.String(), "\n") {
+							data, ok := strings.CutPrefix(line, "data: ")
+							if !ok || data == "[DONE]" {
+								continue
+							}
+							assert.True(t, gjson.Valid(data), "SSE data must be valid JSON")
+							text.WriteString(gjson.Get(data, tc.textPath).String())
+						}
+						assert.Equal(t, message, text.String())
+						assert.Contains(t, response.Body.String(), tc.terminal, "clients must receive a terminal event")
+					}
+				}
+				assert.Equal(t, 1, called, "local replies never enter upstream or usage logging handlers")
+				if ttl != nil {
+					assert.Equal(t, time.Hour-time.Minute, ttl(), "local replies must not refresh the rate limit expiry")
+				}
+				config.Groups["High Risk"] = setting.UserGroupRateLimitRule{DurationSeconds: 3600, MaxRequests: 1}
+				encoded, err = common.Marshal(config)
+				require.NoError(t, err)
+				require.NoError(t, setting.UpdateUserGroupRateLimitConfig(string(encoded)))
+				request = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(body))
+				request.Header.Set("Content-Type", "application/json")
+				denied := httptest.NewRecorder()
+				router.ServeHTTP(denied, request)
+				assert.Equal(t, http.StatusTooManyRequests, denied.Code, "disabling custom replies immediately restores 429 without resetting the quota")
+				assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, denied.Body.String())
+				config.Groups["High Risk"] = setting.UserGroupRateLimitRule{DurationSeconds: 3600, MaxRequests: 2}
+				encoded, err = common.Marshal(config)
+				require.NoError(t, err)
+				require.NoError(t, setting.UpdateUserGroupRateLimitConfig(string(encoded)))
+				request = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(body))
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				assert.Equal(t, "upstream", response.Body.String(), "local replies and 429 rejections must not consume quota slots")
+			})
+		}
+	}
+}
+
+func TestUserGroupRateLimitCustomResponseValidation(t *testing.T) {
+	previous := setting.UserGroupRateLimitConfigJSON()
+	t.Cleanup(func() { require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previous)) })
+	for _, message := range []string{"", " \n\t", strings.Repeat("字", 4001)} {
+		raw, err := common.Marshal(setting.UserGroupRateLimitConfig{Groups: map[string]setting.UserGroupRateLimitRule{
+			"High Risk": {DurationSeconds: 3600, MaxRequests: 1, CustomResponseEnabled: true, CustomResponseMessage: message},
+		}})
+		require.NoError(t, err)
+		assert.Error(t, setting.UpdateUserGroupRateLimitConfig(string(raw)))
+		assert.JSONEq(t, previous, setting.UserGroupRateLimitConfigJSON())
+	}
+	_, err := setting.ParseUserGroupRateLimitConfig(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_message":"saved draft"}}}`)
+	assert.NoError(t, err, "disabled replies can retain saved text")
+}
 
 func TestModelRateLimitStreamFailuresDoNotConsumeSuccessLimit(t *testing.T) {
 	for _, backend := range []string{"memory", "redis"} {

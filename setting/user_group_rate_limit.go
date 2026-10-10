@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -13,8 +14,10 @@ const UserGroupRateLimitOptionKey = "UserGroupRateLimit"
 const MaxUserGroupRateLimitDurationSeconds = 30 * 24 * 60 * 60
 
 type UserGroupRateLimitRule struct {
-	DurationSeconds int64 `json:"duration_seconds"`
-	MaxRequests     int   `json:"max_requests"`
+	DurationSeconds       int64  `json:"duration_seconds"`
+	MaxRequests           int    `json:"max_requests"`
+	CustomResponseEnabled bool   `json:"custom_response_enabled,omitempty"`
+	CustomResponseMessage string `json:"custom_response_message,omitempty"`
 }
 
 type UserGroupRateLimitConfig struct {
@@ -42,6 +45,12 @@ func ParseUserGroupRateLimitConfig(raw string) (UserGroupRateLimitConfig, error)
 		}
 		if rule.DurationSeconds < 1 || rule.DurationSeconds > MaxUserGroupRateLimitDurationSeconds || rule.MaxRequests < 1 || rule.MaxRequests > 10000 {
 			return parsed, fmt.Errorf("group %q requires a period of 1–2592000 seconds and 1–10000 requests", group)
+		}
+		if utf8.RuneCountInString(rule.CustomResponseMessage) > 4000 {
+			return parsed, fmt.Errorf("group %q custom response must be at most 4000 characters", group)
+		}
+		if rule.CustomResponseEnabled && strings.TrimSpace(rule.CustomResponseMessage) == "" {
+			return parsed, fmt.Errorf("group %q custom response message is required", group)
 		}
 	}
 	return parsed, nil

@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "制限超過時のカスタム応答",
+    "Configure reply": "応答を設定",
+    "Enable custom over-limit reply": "制限超過時のカスタム応答を有効にする",
+    "Custom reply text": "カスタム応答のテキスト",
+    "Custom response must be at most 4000 characters.": "カスタム応答は4000文字以内で入力してください。",
+    "Custom response message is required.": "カスタム応答のテキストを入力してください。",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "制限内のリクエストは通常どおり処理されます。制限超過時にこの設定を有効にすると、429の代わりにHTTP 200で入力したテキストをモデルの応答として返します。変更を適用するには設定ページの「保存」をクリックしてください。",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "4000文字以内で入力してください。チャットAPIは通常応答とストリーミングに対応し、テキスト以外のAPIはJSONメッセージを返します。上流へのリクエストや使用ログは作成されません。",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "ユーザーごとに独立した制限があり、すべてのキーとモデルで共有されます。失敗も含め転送前にカウントされます。制限超過時は429、カスタム応答が有効な場合はHTTP 200を返します。上流へのリクエストや使用ログは作成されません。",
     "Limit Period": "制限期間",
     "User Group Rate Limits": "ユーザーグループのレート制限",
     "Enable user group rate limits": "ユーザーグループのレート制限を有効化",

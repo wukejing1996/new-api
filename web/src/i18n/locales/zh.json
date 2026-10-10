@@ -1,5 +1,14 @@
 {
   "translation": {
+    "Custom over-limit reply": "超限自定义回复",
+    "Configure reply": "配置回复",
+    "Enable custom over-limit reply": "启用超限自定义回复",
+    "Custom reply text": "自定义回复文字",
+    "Custom response must be at most 4000 characters.": "自定义回复最多 4000 个字符。",
+    "Custom response message is required.": "请填写自定义回复文字。",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.": "未超限时请求正常通行。超限后开启此选项，将以 HTTP 200 返回填写的模型回复，代替 429 错误。修改后需点击设置页面的“保存”才能生效。",
+    "Enter up to 4000 characters. Chat APIs support normal and streaming replies; non-text APIs return a JSON message. No upstream request or usage log is created.": "最多填写 4000 个字符。聊天 API 支持普通与流式回复；非文字 API 返回 JSON 提示。不会调用上游或记录使用日志。",
+    "Each user has a separate quota shared by all keys and models. Requests count before forwarding, including failures. Over-limit requests return 429, or a custom reply with HTTP 200 when enabled. They never call upstream or create usage logs.": "每位用户拥有独立配额，所有密钥和模型共用。请求转发前计数，包括失败请求。超限默认返回 429，开启自定义回复后返回 HTTP 200；均不会调用上游或记录使用日志。",
     "Limit Period": "限制周期",
     "User Group Rate Limits": "用户分组速率限制",
     "Enable user group rate limits": "启用用户分组速率限制",

@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,6 +70,105 @@ beforeEach(() => {
 })
 
 describe('user group rate limits', () => {
+  it('validates and saves custom reply text only after the settings page Save', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}' />
+    )
+    await user.click(screen.getByRole('button', { name: 'Configure reply' }))
+    const dialog = screen.getByRole('dialog')
+    await user.click(
+      within(dialog).getByRole('switch', {
+        name: 'Enable custom over-limit reply',
+      })
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(api.put).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    expect(
+      await screen.findByText('Custom response message is required.')
+    ).toBeVisible()
+    expect(api.put).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Configure reply' }))
+    fireEvent.change(
+      within(screen.getByRole('dialog')).getByRole('textbox', {
+        name: 'Custom reply text',
+      }),
+      { target: { value: '风险提示\n请联系支持' } }
+    )
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Done' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value: JSON.stringify({
+          enabled: true,
+          groups: {
+            'High Risk': {
+              duration_seconds: 3600,
+              max_requests: 1,
+              custom_response_enabled: true,
+              custom_response_message: '风险提示\n请联系支持',
+            },
+          },
+        }),
+      })
+    )
+  })
+
+  it('loads a saved custom reply and preserves its text when disabled', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Saved reply"}}}' />
+    )
+    await user.click(screen.getByRole('button', { name: 'Configure reply' }))
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByRole('textbox', { name: 'Custom reply text' })
+    ).toHaveValue('Saved reply')
+    expect(
+      within(dialog).getByRole('switch', {
+        name: 'Enable custom over-limit reply',
+      })
+    ).toBeChecked()
+    await user.click(
+      within(dialog).getByRole('switch', {
+        name: 'Enable custom over-limit reply',
+      })
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value:
+          '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_message":"Saved reply"}}}',
+      })
+    )
+  })
+
+  it('limits custom reply length and requires text only when enabled', () => {
+    const schema = createUserGroupRateLimitSchema((key) => key)
+    const values = parseUserGroupRateLimit(
+      '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}'
+    )
+    expect(schema.safeParse(values).success).toBe(true)
+    values.rules[0].customResponseEnabled = true
+    values.rules[0].customResponseMessage = ' \n\t'
+    expect(schema.safeParse(values).success).toBe(false)
+    values.rules[0].customResponseMessage = '字'.repeat(4001)
+    expect(schema.safeParse(values).success).toBe(false)
+    values.rules[0].customResponseMessage = '字'.repeat(4000)
+    expect(schema.safeParse(values).success).toBe(true)
+  })
   it('selects a user group and saves an independent one-hour rule', async () => {
     const user = userEvent.setup()
     render(<Fixture />)

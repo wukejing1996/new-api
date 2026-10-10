@@ -27,6 +27,8 @@ const storedConfigSchema = z.object({
     z.object({
       duration_seconds: z.number().int().min(1).max(2592000),
       max_requests: z.number().int().min(1).max(10000),
+      custom_response_enabled: z.boolean().optional(),
+      custom_response_message: z.string().optional(),
     })
   ),
 })
@@ -42,6 +44,13 @@ export function createUserGroupRateLimitSchema(t: (key: string) => string) {
             period: z.number().int().min(1, t('Enter a positive integer')),
             unit: z.enum(['seconds', 'minutes', 'hours', 'days']),
             maxRequests: z.number().int().min(1).max(10000),
+            customResponseEnabled: z.boolean(),
+            customResponseMessage: z
+              .string()
+              .refine(
+                (value) => [...value].length <= 4000,
+                t('Custom response must be at most 4000 characters.')
+              ),
           })
         )
         .max(1000),
@@ -57,6 +66,13 @@ export function createUserGroupRateLimitSchema(t: (key: string) => string) {
           })
         }
         groups.add(rule.group)
+        if (rule.customResponseEnabled && !rule.customResponseMessage.trim()) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['rules', index, 'customResponseMessage'],
+            message: t('Custom response message is required.'),
+          })
+        }
         if (rule.period * periodUnits[rule.unit] > 2592000) {
           ctx.addIssue({
             code: 'custom',
@@ -88,6 +104,8 @@ export function parseUserGroupRateLimit(
         period: rule.duration_seconds / periodUnits[unit],
         unit,
         maxRequests: rule.max_requests,
+        customResponseEnabled: rule.custom_response_enabled ?? false,
+        customResponseMessage: rule.custom_response_message ?? '',
       }
     }),
   }
@@ -104,6 +122,10 @@ export function serializeUserGroupRateLimit(
         {
           duration_seconds: rule.period * periodUnits[rule.unit],
           max_requests: rule.maxRequests,
+          ...(rule.customResponseEnabled && { custom_response_enabled: true }),
+          ...(rule.customResponseMessage && {
+            custom_response_message: rule.customResponseMessage,
+          }),
         },
       ])
     ),
