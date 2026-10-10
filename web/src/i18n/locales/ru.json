@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "Вероятность настроенного ответа (%)",
+    "Enter a whole percentage from 0 to 100.": "Введите целый процент от 0 до 100.",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Каждый запрос сверх лимита выбирается независимо. 70 % означает вероятность настроенного ответа 70 % и ответа 429 — 30 %. При 0 % всегда возвращается 429; при 100 % — настроенный ответ, если он включён.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "В пределах лимита запросы проходят как обычно. После превышения эта настройка случайным образом возвращает ваш текст с HTTP 200 согласно заданной вероятности; остальные запросы получают 429. Нажмите «Сохранить» на странице настроек, чтобы применить изменения.",
     "Rate limit counts": "Статистика ограничений",
     "Refresh counts": "Обновить статистику",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Накопленные ответы и отклонения 429 по группам пользователей. Счётчики не зависят от периода ограничения и включают ранее настроенные группы.",

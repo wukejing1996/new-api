@@ -29,6 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -36,6 +37,7 @@ import {
   SettingsSwitchContent,
   SettingsSwitchItem,
 } from '../components/settings-form-layout'
+import { safeNumberFieldProps } from '../utils/numeric-field'
 import type { UserGroupRateLimitFormValues } from './lib/user-group-rate-limit'
 
 type Props = {
@@ -55,7 +57,7 @@ export function UserGroupRateLimitResponseDialog(props: Props) {
       }}
       title={t('Custom over-limit reply')}
       description={t(
-        'Within the limit, requests proceed normally. After the limit is exceeded, enabling this option returns your text as a model reply with HTTP 200 instead of 429. Click Save on the settings page to apply changes.'
+        'Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.'
       )}
       bodyClassName='space-y-4'
       footer={
@@ -80,6 +82,31 @@ export function UserGroupRateLimitResponseDialog(props: Props) {
               />
             </FormControl>
           </SettingsSwitchItem>
+        )}
+      />
+      <FormField
+        control={props.control}
+        name={`rules.${props.index}.customResponseProbability`}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{t('Custom reply probability (%)')}</FormLabel>
+            <FormControl>
+              <Input
+                type='number'
+                min={0}
+                max={100}
+                step={1}
+                disabled={props.disabled}
+                {...safeNumberFieldProps(field)}
+              />
+            </FormControl>
+            <FormDescription>
+              {t(
+                'Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.'
+              )}
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
         )}
       />
       <FormField

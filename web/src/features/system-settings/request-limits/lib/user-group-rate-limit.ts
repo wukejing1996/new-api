@@ -29,6 +29,7 @@ const storedConfigSchema = z.object({
       max_requests: z.number().int().min(1).max(10000),
       custom_response_enabled: z.boolean().optional(),
       custom_response_message: z.string().optional(),
+      custom_response_probability: z.number().int().min(0).max(100).nullish(),
     })
   ),
 })
@@ -45,6 +46,11 @@ export function createUserGroupRateLimitSchema(t: (key: string) => string) {
             unit: z.enum(['seconds', 'minutes', 'hours', 'days']),
             maxRequests: z.number().int().min(1).max(10000),
             customResponseEnabled: z.boolean(),
+            customResponseProbability: z
+              .number()
+              .int(t('Enter a whole percentage from 0 to 100.'))
+              .min(0, t('Enter a whole percentage from 0 to 100.'))
+              .max(100, t('Enter a whole percentage from 0 to 100.')),
             customResponseMessage: z
               .string()
               .refine(
@@ -105,6 +111,7 @@ export function parseUserGroupRateLimit(
         unit,
         maxRequests: rule.max_requests,
         customResponseEnabled: rule.custom_response_enabled ?? false,
+        customResponseProbability: rule.custom_response_probability ?? 100,
         customResponseMessage: rule.custom_response_message ?? '',
       }
     }),
@@ -125,6 +132,9 @@ export function serializeUserGroupRateLimit(
           ...(rule.customResponseEnabled && { custom_response_enabled: true }),
           ...(rule.customResponseMessage && {
             custom_response_message: rule.customResponseMessage,
+          }),
+          ...(rule.customResponseProbability !== 100 && {
+            custom_response_probability: rule.customResponseProbability,
           }),
         },
       ])

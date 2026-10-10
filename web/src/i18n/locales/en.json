@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "Custom reply probability (%)",
+    "Enter a whole percentage from 0 to 100.": "Enter a whole percentage from 0 to 100.",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.",
     "Rate limit counts": "Rate limit counts",
     "Refresh counts": "Refresh counts",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.",

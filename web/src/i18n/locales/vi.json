@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "Xác suất phản hồi tùy chỉnh (%)",
+    "Enter a whole percentage from 0 to 100.": "Nhập phần trăm nguyên từ 0 đến 100.",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Mỗi yêu cầu vượt giới hạn được chọn độc lập. 70% nghĩa là 70% khả năng phản hồi tùy chỉnh và 30% khả năng trả 429. 0% luôn trả 429; 100% luôn trả phản hồi tùy chỉnh khi bật.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "Trong giới hạn, yêu cầu được xử lý bình thường. Khi vượt giới hạn, tùy chọn này trả ngẫu nhiên văn bản của bạn với HTTP 200 theo xác suất đã cấu hình; các yêu cầu còn lại trả 429. Nhấn Lưu trên trang cài đặt để áp dụng thay đổi.",
     "Rate limit counts": "Thống kê giới hạn",
     "Refresh counts": "Làm mới thống kê",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Tổng phản hồi tùy chỉnh và yêu cầu bị chặn với 429 theo nhóm người dùng. Số đếm độc lập với khoảng giới hạn và bao gồm các nhóm đã cấu hình trước đây.",

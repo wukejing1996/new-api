@@ -162,6 +162,7 @@ export function UserGroupRateLimitSection(props: { defaultValue: string }) {
                   unit: 'hours',
                   maxRequests: 1,
                   customResponseEnabled: false,
+                  customResponseProbability: 100,
                   customResponseMessage: '',
                 })
               }

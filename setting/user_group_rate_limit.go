@@ -14,10 +14,11 @@ const UserGroupRateLimitOptionKey = "UserGroupRateLimit"
 const MaxUserGroupRateLimitDurationSeconds = 30 * 24 * 60 * 60
 
 type UserGroupRateLimitRule struct {
-	DurationSeconds       int64  `json:"duration_seconds"`
-	MaxRequests           int    `json:"max_requests"`
-	CustomResponseEnabled bool   `json:"custom_response_enabled,omitempty"`
-	CustomResponseMessage string `json:"custom_response_message,omitempty"`
+	DurationSeconds           int64  `json:"duration_seconds"`
+	MaxRequests               int    `json:"max_requests"`
+	CustomResponseEnabled     bool   `json:"custom_response_enabled,omitempty"`
+	CustomResponseMessage     string `json:"custom_response_message,omitempty"`
+	CustomResponseProbability *int   `json:"custom_response_probability,omitempty"`
 }
 
 type UserGroupRateLimitConfig struct {
@@ -51,6 +52,9 @@ func ParseUserGroupRateLimitConfig(raw string) (UserGroupRateLimitConfig, error)
 		}
 		if rule.CustomResponseEnabled && strings.TrimSpace(rule.CustomResponseMessage) == "" {
 			return parsed, fmt.Errorf("group %q custom response message is required", group)
+		}
+		if rule.CustomResponseProbability != nil && (*rule.CustomResponseProbability < 0 || *rule.CustomResponseProbability > 100) {
+			return parsed, fmt.Errorf("group %q custom response probability must be an integer from 0 to 100", group)
 		}
 	}
 	return parsed, nil

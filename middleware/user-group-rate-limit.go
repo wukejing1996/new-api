@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -34,6 +35,22 @@ return {1, 0}
 `)
 
 var userGroupMemoryRateLimiter common.InMemoryRateLimiter
+
+var userGroupCustomResponseRandom = rand.IntN
+
+func shouldReturnUserGroupCustomResponse(rule setting.UserGroupRateLimitRule) bool {
+	if !rule.CustomResponseEnabled {
+		return false
+	}
+	// Missing probability preserves the behavior of existing configurations.
+	if rule.CustomResponseProbability == nil || *rule.CustomResponseProbability == 100 {
+		return true
+	}
+	if *rule.CustomResponseProbability == 0 {
+		return false
+	}
+	return userGroupCustomResponseRandom(100) < *rule.CustomResponseProbability
+}
 
 // A matching user rule replaces the legacy token-group limiter, including
 // when that limiter is disabled. The caller must return when this is true.
@@ -68,7 +85,7 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 		allowed = userGroupMemoryRateLimiter.Request(key, rule.MaxRequests, rule.DurationSeconds)
 	}
 	if !allowed {
-		if rule.CustomResponseEnabled {
+		if shouldReturnUserGroupCustomResponse(rule) {
 			if respondUserGroupRateLimit(c, rule.CustomResponseMessage, group) {
 				service.RecordUserGroupRateLimitResult(c.Request.Context(), group, http.StatusOK)
 			}

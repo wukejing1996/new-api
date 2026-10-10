@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "自訂回覆機率（%）",
+    "Enter a whole percentage from 0 to 100.": "請輸入 0 到 100 的整數百分比。",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "每個超限請求獨立隨機判斷。70% 表示有 70% 機率回傳自訂回覆、30% 機率回傳 429。0% 一律回傳 429；開啟後設定 100% 一律回傳自訂回覆。",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "未超限時請求正常通行。超限後開啟此選項，將依設定機率隨機回傳 HTTP 200 自訂文字，其餘請求回傳 429。修改後需點擊設定頁面的「儲存」才能生效。",
     "Rate limit counts": "限流觸發統計",
     "Refresh counts": "重新整理統計",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "依使用者群組累計自訂回覆和 429 攔截次數。統計不隨限流視窗歸零，包含曾設定過的群組。",

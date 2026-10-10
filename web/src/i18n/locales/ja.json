@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "カスタム応答の確率（%）",
+    "Enter a whole percentage from 0 to 100.": "0から100までの整数の割合を入力してください。",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "制限超過リクエストごとに独立して抽選します。70%では70%の確率でカスタム応答、30%の確率で429を返します。0%は常に429、有効時の100%は常にカスタム応答を返します。",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "制限内のリクエストは通常どおり処理されます。制限超過時に有効にすると、設定した確率でHTTP 200のカスタム応答を返し、それ以外は429を返します。変更を適用するには設定ページの「保存」をクリックしてください。",
     "Rate limit counts": "制限の発動回数",
     "Refresh counts": "回数を更新",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "ユーザーグループ別のカスタム応答と429拒否の累計です。制限期間でリセットされず、以前設定したグループも含まれます。",

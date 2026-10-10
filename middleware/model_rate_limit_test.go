@@ -384,6 +384,93 @@ func TestUserGroupRateLimitCustomResponseValidation(t *testing.T) {
 	}
 	_, err := setting.ParseUserGroupRateLimitConfig(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_message":"saved draft"}}}`)
 	assert.NoError(t, err, "disabled replies can retain saved text")
+	for _, probability := range []string{"-1", "101", "70.5", `"70"`} {
+		raw := fmt.Sprintf(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_probability":%s}}}`, probability)
+		assert.Error(t, setting.UpdateUserGroupRateLimitConfig(raw))
+		assert.JSONEq(t, previous, setting.UserGroupRateLimitConfigJSON(), "invalid percentages must leave the active configuration unchanged")
+	}
+	for _, probability := range []string{"0", "70", "100", "null"} {
+		raw := fmt.Sprintf(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_probability":%s}}}`, probability)
+		_, err := setting.ParseUserGroupRateLimitConfig(raw)
+		assert.NoError(t, err)
+	}
+}
+
+func TestUserGroupRateLimitCustomResponseProbability(t *testing.T) {
+	previousConfig := setting.UserGroupRateLimitConfigJSON()
+	previousRedis, previousEnabled := common.RedisEnabled, setting.ModelRequestRateLimitEnabled
+	previousRandom := userGroupCustomResponseRandom
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig))
+		common.RedisEnabled, setting.ModelRequestRateLimitEnabled = previousRedis, previousEnabled
+		userGroupCustomResponseRandom = previousRandom
+	})
+	for _, backend := range []string{"memory", "redis"} {
+		for _, tc := range []struct {
+			name        string
+			probability string
+			enabled     bool
+			draw        int
+			status      int
+			randomCalls int
+		}{
+			{"legacy default", "", true, 99, 200, 0},
+			{"zero percent", `,"custom_response_probability":0`, true, 0, 429, 0},
+			{"hundred percent", `,"custom_response_probability":100`, true, 99, 200, 0},
+			{"selected below threshold", `,"custom_response_probability":70`, true, 69, 200, 1},
+			{"rejected at threshold", `,"custom_response_probability":70`, true, 70, 429, 1},
+			{"disabled", `,"custom_response_probability":70`, false, 0, 429, 0},
+		} {
+			t.Run(backend+"/"+tc.name, func(t *testing.T) {
+				common.RedisEnabled, setting.ModelRequestRateLimitEnabled = false, false
+				if backend == "redis" {
+					useRateLimitMiniRedis(t)
+				}
+				raw := fmt.Sprintf(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":%t,"custom_response_message":"Contact support"%s}}}`, tc.enabled, tc.probability)
+				require.NoError(t, setting.UpdateUserGroupRateLimitConfig(raw))
+				randomCalls := 0
+				userGroupCustomResponseRandom = func(bound int) int {
+					assert.Equal(t, 100, bound)
+					randomCalls++
+					return tc.draw
+				}
+				userID := 7400000 + int(modelRateLimitTestUsers.Add(1))
+				called := 0
+				engine := gin.New()
+				engine.POST("/v1/chat/completions", func(c *gin.Context) {
+					c.Set("id", userID)
+					common.SetContextKey(c, constant.ContextKeyUserGroup, "High Risk")
+				}, ModelRequestRateLimit(), func(c *gin.Context) { called++; c.String(http.StatusOK, "upstream") })
+				first := httptest.NewRecorder()
+				engine.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil))
+				require.Equal(t, "upstream", first.Body.String())
+				assert.Zero(t, randomCalls, "the random selection applies only after exceeding the limit")
+				request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"test"}`))
+				request.Header.Set("Content-Type", "application/json")
+				response := httptest.NewRecorder()
+				engine.ServeHTTP(response, request)
+				assert.Equal(t, tc.status, response.Code)
+				assert.Equal(t, tc.randomCalls, randomCalls)
+				assert.Equal(t, 1, called)
+				if tc.status == http.StatusOK {
+					assert.Equal(t, "Contact support", gjson.Get(response.Body.String(), "choices.0.message.content").String())
+				} else {
+					assert.JSONEq(t, `{"error":{"message":"Rate limit exceeded","type":"new_api_error","code":""}}`, response.Body.String())
+				}
+				if backend == "redis" {
+					stats, err := service.GetUserGroupRateLimitStats(context.Background())
+					require.NoError(t, err)
+					if tc.status == http.StatusOK {
+						assert.EqualValues(t, 1, stats.Counts["High Risk"])
+						assert.Empty(t, stats.RejectedCounts)
+					} else {
+						assert.EqualValues(t, 1, stats.RejectedCounts["High Risk"])
+						assert.Empty(t, stats.Counts)
+					}
+				}
+			})
+		}
+	}
 }
 
 func TestModelRateLimitStreamFailuresDoNotConsumeSuccessLimit(t *testing.T) {

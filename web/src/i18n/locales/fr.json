@@ -1,5 +1,9 @@
 {
   "translation": {
+    "Custom reply probability (%)": "Probabilité de réponse personnalisée (%)",
+    "Enter a whole percentage from 0 to 100.": "Saisissez un pourcentage entier de 0 à 100.",
+    "Each over-limit request is selected independently. 70% means a 70% chance of a custom reply and a 30% chance of 429. 0% always returns 429; 100% always returns a custom reply when enabled.": "Chaque requête dépassant la limite est sélectionnée indépendamment. 70 % signifie 70 % de chance de réponse personnalisée et 30 % de rejet 429. 0 % renvoie toujours 429 ; 100 % renvoie toujours une réponse personnalisée si activée.",
+    "Within the limit, requests proceed normally. After the limit is exceeded, enabling this option randomly returns your text with HTTP 200 according to the configured probability; other requests return 429. Click Save on the settings page to apply changes.": "Les requêtes autorisées sont transmises normalement. Après dépassement, cette option renvoie aléatoirement votre texte avec HTTP 200 selon la probabilité configurée ; les autres requêtes renvoient 429. Cliquez sur Enregistrer dans les paramètres pour appliquer les modifications.",
     "Rate limit counts": "Statistiques de limitation",
     "Refresh counts": "Actualiser les statistiques",
     "Cumulative custom replies and 429 rejections by user group. Counts are independent of the rate limit window and include previously configured groups.": "Réponses personnalisées et rejets 429 cumulés par groupe. Ces compteurs sont indépendants de la période de limitation et incluent les groupes précédemment configurés.",

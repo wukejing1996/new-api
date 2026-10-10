@@ -263,6 +263,81 @@ describe('user group rate limits', () => {
     )
   })
 
+  it('defaults legacy probability to 100 and saves a selected 70 percent probability', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Saved reply"}}}' />
+    )
+    await user.click(screen.getByRole('button', { name: 'Configure reply' }))
+    const dialog = screen.getByRole('dialog')
+    const probability = within(dialog).getByRole('spinbutton', {
+      name: 'Custom reply probability (%)',
+    })
+    expect(probability).toHaveValue(100)
+    fireEvent.change(probability, { target: { value: '101' } })
+    expect(
+      await within(dialog).findByText('Enter a whole percentage from 0 to 100.')
+    ).toBeVisible()
+    fireEvent.change(probability, { target: { value: '70' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(api.put).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value:
+          '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Saved reply","custom_response_probability":70}}}',
+      })
+    )
+  })
+
+  it('loads zero percent and preserves it when custom replies are disabled', async () => {
+    const user = userEvent.setup()
+    render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_enabled":true,"custom_response_message":"Saved reply","custom_response_probability":0}}}' />
+    )
+    await user.click(screen.getByRole('button', { name: 'Configure reply' }))
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByRole('spinbutton', {
+        name: 'Custom reply probability (%)',
+      })
+    ).toHaveValue(0)
+    await user.click(
+      within(dialog).getByRole('switch', {
+        name: 'Enable custom over-limit reply',
+      })
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value:
+          '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1,"custom_response_message":"Saved reply","custom_response_probability":0}}}',
+      })
+    )
+  })
+
+  it('validates whole percentages from zero through one hundred', () => {
+    const schema = createUserGroupRateLimitSchema((key) => key)
+    const values = parseUserGroupRateLimit(
+      '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}'
+    )
+    for (const probability of [-1, 101, 70.5]) {
+      values.rules[0].customResponseProbability = probability
+      expect(schema.safeParse(values).success).toBe(false)
+    }
+    for (const probability of [0, 70, 100]) {
+      values.rules[0].customResponseProbability = probability
+      expect(schema.safeParse(values).success).toBe(true)
+    }
+  })
+
   it('limits custom reply length and requires text only when enabled', () => {
     const schema = createUserGroupRateLimitSchema((key) => key)
     const values = parseUserGroupRateLimit(
