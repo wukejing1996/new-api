@@ -901,7 +901,8 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 	if err = tx.First(&current, user.Id).Error; err != nil {
 		return err
 	}
-	authChanged := (updatePassword && current.Password != newUser.Password) || current.Group != newUser.Group
+	// Moving to High Risk changes request policy without invalidating login sessions.
+	authChanged := (updatePassword && current.Password != newUser.Password) || (current.Group != newUser.Group && newUser.Group != "High Risk")
 	if authChanged {
 		newUser.AuthVersion, err = IncrementUserAuthVersionWithTx(tx, user.Id)
 		if err != nil {

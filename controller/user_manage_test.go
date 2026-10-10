@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
@@ -91,6 +92,80 @@ func performManageUserRequest(t *testing.T, body string) *httptest.ResponseRecor
 	c.Set(common.RequestIdKey, "quota-test-request")
 	ManageUser(c)
 	return recorder
+}
+
+func TestUpdateUserHighRiskGroupPreservesSessions(t *testing.T) {
+	previousMaster := common.IsMasterNode
+	common.IsMasterNode = false
+	t.Cleanup(func() { common.IsMasterNode = previousMaster })
+	for _, redisEnabled := range []bool{false, true} {
+		for _, tc := range []struct {
+			name, group, password string
+			revoked               bool
+		}{
+			{"high risk only", "High Risk", "", false},
+			{"other group", "vip", "", true},
+			{"high risk with password change", "High Risk", "NewPassword123", true},
+		} {
+			t.Run(fmt.Sprintf("%s/redis=%t", tc.name, redisEnabled), func(t *testing.T) {
+				db := setupManageUserTestDB(t)
+				require.NoError(t, authz.Init(db))
+				require.NoError(t, db.Create(&model.User{Id: 9999, Username: "root-operator", Role: common.RoleRootUser,
+					Status: common.UserStatusEnabled, AuthVersion: 1, AffCode: "root-operator-aff"}).Error)
+				if redisEnabled {
+					server := miniredis.RunT(t)
+					previousRDB := common.RDB
+					client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+					common.RedisEnabled, common.RDB = true, client
+					t.Cleanup(func() {
+						require.NoError(t, client.Close())
+						common.RDB = previousRDB
+					})
+				}
+				user := model.User{
+					Username: "group-change-user", Password: "old-hash", Role: common.RoleCommonUser,
+					Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+				}
+				require.NoError(t, db.Create(&user).Error)
+				now := time.Now().Unix()
+				session := model.UserSession{
+					SID: "group-change-session", UserID: user.Id, Version: 1, UserAuthVersion: 1,
+					Status: model.UserSessionStatusActive, RefreshHash: "refresh-hash", LoginMethod: "password",
+					LastActiveAt: now, ExpiresAt: now + 3600,
+				}
+				require.NoError(t, model.CreateUserSession(&session))
+				identity := service.AuthIdentity{UserID: user.Id, SessionID: session.SID, SessionVersion: 1, UserAuthVersion: 1}
+				_, _, err := service.ValidateLoginSession(identity)
+				require.NoError(t, err, "preheat both caches before changing the group")
+
+				recorder := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(recorder)
+				body := fmt.Sprintf(`{"id":%d,"username":%q,"group":%q,"password":%q}`, user.Id, user.Username, tc.group, tc.password)
+				c.Request = httptest.NewRequest(http.MethodPut, "/api/user/", strings.NewReader(body))
+				c.Request.Header.Set("Content-Type", "application/json")
+				c.Set("id", 9999)
+				c.Set("role", common.RoleRootUser)
+				UpdateUser(c)
+				require.Contains(t, recorder.Body.String(), `"success":true`)
+
+				cached, err := model.GetUserCache(user.Id)
+				require.NoError(t, err)
+				assert.Equal(t, tc.group, cached.Group, "the next request must use the new group")
+				storedSession, err := model.GetUserSessionBySID(session.SID)
+				require.NoError(t, err)
+				_, _, err = service.ValidateLoginSession(identity)
+				if tc.revoked {
+					assert.EqualValues(t, 2, cached.AuthVersion)
+					assert.Equal(t, model.UserSessionStatusRevoked, storedSession.Status)
+					assert.ErrorIs(t, err, service.ErrLoginSessionRevoked)
+				} else {
+					assert.EqualValues(t, 1, cached.AuthVersion)
+					assert.Equal(t, model.UserSessionStatusActive, storedSession.Status)
+					assert.NoError(t, err, "the existing login session must remain usable")
+				}
+			})
+		}
+	}
 }
 
 func TestManageUserDisableAdvancesAuthVersionOnceAndRevokesSession(t *testing.T) {
