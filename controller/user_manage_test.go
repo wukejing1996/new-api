@@ -100,12 +100,15 @@ func TestUpdateUserHighRiskGroupPreservesSessions(t *testing.T) {
 	t.Cleanup(func() { common.IsMasterNode = previousMaster })
 	for _, redisEnabled := range []bool{false, true} {
 		for _, tc := range []struct {
-			name, group, password string
-			revoked               bool
+			name, initialGroup, group, password string
+			revoked                             bool
 		}{
-			{"high risk only", "High Risk", "", false},
-			{"other group", "vip", "", true},
-			{"high risk with password change", "High Risk", "NewPassword123", true},
+			{"high risk only", "default", "High Risk", "", false},
+			{"from high risk to default", "High Risk", "default", "", false},
+			{"from high risk to other group", "High Risk", "vip", "", false},
+			{"other group", "default", "vip", "", true},
+			{"high risk with password change", "default", "High Risk", "NewPassword123", true},
+			{"from high risk with password change", "High Risk", "default", "NewPassword123", true},
 		} {
 			t.Run(fmt.Sprintf("%s/redis=%t", tc.name, redisEnabled), func(t *testing.T) {
 				db := setupManageUserTestDB(t)
@@ -124,7 +127,7 @@ func TestUpdateUserHighRiskGroupPreservesSessions(t *testing.T) {
 				}
 				user := model.User{
 					Username: "group-change-user", Password: "old-hash", Role: common.RoleCommonUser,
-					Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+					Status: common.UserStatusEnabled, Group: tc.initialGroup, AuthVersion: 1,
 				}
 				require.NoError(t, db.Create(&user).Error)
 				now := time.Now().Unix()

@@ -148,6 +148,12 @@ export function useSidebarData(): SidebarData {
             icon: Users,
           },
           {
+            title: t('Support tickets'),
+            url: '/tickets',
+            icon: MessageSquare,
+            requiredRole: ROLE.ADMIN,
+          },
+          {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,

@@ -19,6 +19,18 @@ For commercial licensing, please contact support@quantumnous.com
 // Static translation keys that don't get picked up by the t('...') regex.
 // These cover dynamic labels (e.g. constants, configs) that are passed into t at runtime.
 export const STATIC_I18N_KEYS = [
+  // Support ticket labels are selected from API enum values.
+  'Open',
+  'Processing',
+  'Resolved',
+  'Closed',
+  'Account',
+  'API',
+  'Billing',
+  'Other',
+  'Normal',
+  'High',
+  'Urgent',
   'Save user group rate limits',
   'Task usage metadata is unavailable. Pricing details cannot be displayed.',
   'This expression cannot be expanded into a price table. View the original expression below.',
