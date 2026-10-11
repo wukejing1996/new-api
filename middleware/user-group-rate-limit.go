@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
@@ -105,7 +106,7 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{
 					"message": message,
-					"type":    "new_api_error",
+					"type":    string(types.ErrorTypeNewAPIError),
 					"code":    "",
 				},
 			})

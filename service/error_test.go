@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,29 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLocalErrorResponsesUseCostRouterType(t *testing.T) {
+	err := errors.New("Service unavailable")
+	for _, apiErr := range []*types.NewAPIError{
+		types.NewError(err, types.ErrorCodeInvalidRequest),
+		types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusTooManyRequests),
+	} {
+		openAI := apiErr.ToOpenAIError()
+		assert.Equal(t, "CostRouter_error", openAI.Type)
+		assert.Equal(t, err.Error(), openAI.Message)
+		assert.Equal(t, types.ErrorCodeInvalidRequest, openAI.Code)
+		assert.Equal(t, "CostRouter_error", apiErr.ToClaudeError().Type)
+	}
+	wrapped := ClaudeErrorWrapperLocal(err, "invalid_request", http.StatusTooManyRequests)
+	assert.Equal(t, "CostRouter_error", wrapped.Error.Type)
+	assert.Equal(t, http.StatusTooManyRequests, wrapped.StatusCode)
+	upstream := types.WithOpenAIError(types.OpenAIError{Message: err.Error(), Type: "server_error", Code: "server_error"}, http.StatusBadGateway)
+	assert.Equal(t, "server_error", upstream.ToOpenAIError().Type)
+	assert.Equal(t, http.StatusBadGateway, upstream.StatusCode)
+}
 
 func TestResetStatusCode(t *testing.T) {
 	t.Parallel()

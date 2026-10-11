@@ -1296,7 +1296,7 @@ func respondPluginProtocolError(c *gin.Context, status int, code, message string
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"message": message,
-			"type":    "new_api_error",
+			"type":    string(types.ErrorTypeNewAPIError),
 			"code":    code,
 		},
 	})

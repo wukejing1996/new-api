@@ -245,7 +245,7 @@ func respondTaskPluginImageError(c *gin.Context, taskErr *dto.TaskError) {
 			code = upstream.Code
 		}
 	}
-	errorType := "new_api_error"
+	errorType := string(types.ErrorTypeNewAPIError)
 	if status < http.StatusInternalServerError {
 		errorType = "invalid_request_error"
 	}

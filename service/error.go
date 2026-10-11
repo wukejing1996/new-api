@@ -70,7 +70,7 @@ func ClaudeErrorWrapper(err error, code string, statusCode int) *dto.ClaudeError
 	}
 	claudeError := types.ClaudeError{
 		Message: text,
-		Type:    "new_api_error",
+		Type:    string(types.ErrorTypeNewAPIError),
 	}
 	return &dto.ClaudeErrorWithStatusCode{
 		Error:      claudeError,
