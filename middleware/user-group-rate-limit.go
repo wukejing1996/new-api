@@ -68,7 +68,8 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 	// All keys and models for this user share a counter, including Auto keys.
 	key := fmt.Sprintf("rateLimit:userGroupModel:v1:%d", userID)
 	allowed := false
-	if common.RedisEnabled {
+	// Zero always enters over-limit handling without reading or writing a window.
+	if rule.MaxRequests > 0 && common.RedisEnabled {
 		if common.RDB == nil {
 			abortWithOpenAiMessage(c, http.StatusInternalServerError, "user_group_rate_limit_check_failed")
 			return true
@@ -79,7 +80,7 @@ func handleUserGroupRateLimit(c *gin.Context) bool {
 			return true
 		}
 		allowed = values[0] == 1
-	} else {
+	} else if rule.MaxRequests > 0 {
 		// Cleanup must never evict an active, long-period rule early.
 		userGroupMemoryRateLimiter.Init(time.Duration(setting.MaxUserGroupRateLimitDurationSeconds) * time.Second)
 		allowed = userGroupMemoryRateLimiter.Request(key, rule.MaxRequests, rule.DurationSeconds)

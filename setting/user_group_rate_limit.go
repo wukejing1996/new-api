@@ -44,8 +44,8 @@ func ParseUserGroupRateLimitConfig(raw string) (UserGroupRateLimitConfig, error)
 		if group == "" || strings.TrimSpace(group) != group || strings.ContainsFunc(group, unicode.IsControl) {
 			return parsed, fmt.Errorf("invalid user group name %q", group)
 		}
-		if rule.DurationSeconds < 1 || rule.DurationSeconds > MaxUserGroupRateLimitDurationSeconds || rule.MaxRequests < 1 || rule.MaxRequests > 10000 {
-			return parsed, fmt.Errorf("group %q requires a period of 1–2592000 seconds and 1–10000 requests", group)
+		if rule.DurationSeconds < 1 || rule.DurationSeconds > MaxUserGroupRateLimitDurationSeconds || rule.MaxRequests < 0 || rule.MaxRequests > 10000 {
+			return parsed, fmt.Errorf("group %q requires a period of 1–2592000 seconds and 0–10000 requests", group)
 		}
 		if utf8.RuneCountInString(rule.CustomResponseMessage) > 4000 {
 			return parsed, fmt.Errorf("group %q custom response must be at most 4000 characters", group)

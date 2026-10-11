@@ -1,5 +1,6 @@
 {
   "translation": {
+    "Set to 0 to treat every request as over-limit.": "Đặt thành 0 để xử lý mọi yêu cầu như đã vượt giới hạn.",
     "Support tickets": "Yêu cầu hỗ trợ",
     "Subject": "Chủ đề",
     "Submitted by": "Người gửi",

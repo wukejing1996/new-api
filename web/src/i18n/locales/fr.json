@@ -1,5 +1,6 @@
 {
   "translation": {
+    "Set to 0 to treat every request as over-limit.": "Définissez 0 pour traiter chaque requête comme dépassant la limite.",
     "Support tickets": "Tickets d’assistance",
     "Subject": "Objet",
     "Submitted by": "Envoyé par",

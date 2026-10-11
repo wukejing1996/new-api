@@ -390,6 +390,39 @@ describe('user group rate limits', () => {
     )
   })
 
+  it('saves zero requests and reloads it as an always-over-limit rule', async () => {
+    const user = userEvent.setup()
+    const view = render(
+      <Fixture initial='{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}' />
+    )
+    const limit = screen.getByRole('spinbutton', {
+      name: 'Max Requests (incl. failures)',
+    })
+    expect(limit).toHaveAttribute('min', '0')
+    fireEvent.change(limit, { target: { value: '0' } })
+    await user.click(
+      screen.getByRole('button', { name: 'Save user group rate limits' })
+    )
+    const saved =
+      '{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}'
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith('/api/option/', {
+        key: 'UserGroupRateLimit',
+        value: saved,
+      })
+    )
+    view.unmount()
+    render(<Fixture initial={saved} />)
+    expect(
+      screen.getByRole('spinbutton', { name: 'Max Requests (incl. failures)' })
+    ).toHaveValue(0)
+    const values = parseUserGroupRateLimit(saved)
+    const schema = createUserGroupRateLimitSchema((key) => key)
+    expect(schema.safeParse(values).success).toBe(true)
+    values.rules[0].maxRequests = -1
+    expect(schema.safeParse(values).success).toBe(false)
+  })
+
   it('loads a saved rule and persists deletion', async () => {
     const user = userEvent.setup()
     render(

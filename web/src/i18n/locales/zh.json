@@ -1,5 +1,6 @@
 {
   "translation": {
+    "Set to 0 to treat every request as over-limit.": "设为 0 时，所有请求均按超限处理。",
     "Support tickets": "工单",
     "Subject": "主题",
     "Submitted by": "提交用户",

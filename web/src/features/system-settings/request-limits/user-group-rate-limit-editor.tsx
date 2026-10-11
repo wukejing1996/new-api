@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormMessage,
@@ -151,7 +152,7 @@ export function UserGroupRateLimitEditor(props: Props) {
                   <FormControl>
                     <Input
                       type='number'
-                      min={1}
+                      min={0}
                       max={10000}
                       step={1}
                       aria-label={t('Max Requests (incl. failures)')}
@@ -159,6 +160,9 @@ export function UserGroupRateLimitEditor(props: Props) {
                       {...safeNumberFieldProps(field)}
                     />
                   </FormControl>
+                  <FormDescription>
+                    {t('Set to 0 to treat every request as over-limit.')}
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

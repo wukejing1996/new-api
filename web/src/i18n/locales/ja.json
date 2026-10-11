@@ -1,5 +1,6 @@
 {
   "translation": {
+    "Set to 0 to treat every request as over-limit.": "0 に設定すると、すべてのリクエストが上限超過として処理されます。",
     "Support tickets": "サポートチケット",
     "Subject": "件名",
     "Submitted by": "送信者",

@@ -166,7 +166,7 @@ func TestUserGroupRateLimitSlidingWindowAndConfiguration(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig)) })
 	valid := `{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":1}}}`
 	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(valid))
-	for _, raw := range []string{"null", `{"groups":null}`, `{"groups":{"High Risk":{"duration_seconds":0,"max_requests":1}}}`, `{"groups":{"High Risk":{"duration_seconds":2592001,"max_requests":1}}}`, `{"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`, `{"groups":{"High Risk":{"duration_seconds":3600,"max_requests":10001}}}`, `{"groups":{" High Risk ":{"duration_seconds":3600,"max_requests":1}}}`} {
+	for _, raw := range []string{"null", `{"groups":null}`, `{"groups":{"High Risk":{"duration_seconds":0,"max_requests":1}}}`, `{"groups":{"High Risk":{"duration_seconds":2592001,"max_requests":1}}}`, `{"groups":{"High Risk":{"duration_seconds":3600,"max_requests":-1}}}`, `{"groups":{"High Risk":{"duration_seconds":3600,"max_requests":10001}}}`, `{"groups":{" High Risk ":{"duration_seconds":3600,"max_requests":1}}}`} {
 		assert.Error(t, setting.UpdateUserGroupRateLimitConfig(raw))
 		assert.JSONEq(t, valid, setting.UserGroupRateLimitConfigJSON(), "invalid saves leave the previous rule intact")
 	}
@@ -196,6 +196,101 @@ func TestUserGroupRateLimitSlidingWindowAndConfiguration(t *testing.T) {
 }
 
 var modelRateLimitTestUsers atomic.Int64
+
+func TestUserGroupRateLimitZeroAlwaysUsesOverLimitHandling(t *testing.T) {
+	previousConfig := setting.UserGroupRateLimitConfigJSON()
+	previousRedis, previousClient := common.RedisEnabled, common.RDB
+	previousEnabled, previousRandom := setting.ModelRequestRateLimitEnabled, userGroupCustomResponseRandom
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousConfig))
+		common.RedisEnabled, common.RDB = previousRedis, previousClient
+		setting.ModelRequestRateLimitEnabled, userGroupCustomResponseRandom = previousEnabled, previousRandom
+	})
+	for _, backend := range []string{"memory", "redis", "redis unavailable"} {
+		for _, tc := range []struct {
+			name                string
+			custom, stream      bool
+			probability, random int
+			status              int
+		}{
+			{"429", false, false, 100, 0, 429},
+			{"custom", true, false, 100, 0, 200},
+			{"custom stream", true, true, 100, 0, 200},
+			{"random custom", true, false, 70, 69, 200},
+			{"random 429", true, false, 70, 70, 429},
+		} {
+			t.Run(backend+"/"+tc.name, func(t *testing.T) {
+				common.RedisEnabled = false
+				setting.ModelRequestRateLimitEnabled = false
+				if backend == "redis" {
+					useRateLimitMiniRedis(t)
+				} else if backend == "redis unavailable" {
+					common.RedisEnabled, common.RDB = true, nil
+				}
+				userGroupCustomResponseRandom = func(int) int { return tc.random }
+				raw := fmt.Sprintf(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0,"custom_response_enabled":%t,"custom_response_message":"Contact support","custom_response_probability":%d}}}`, tc.custom, tc.probability)
+				require.NoError(t, setting.UpdateUserGroupRateLimitConfig(raw))
+				userID := 7500000 + int(modelRateLimitTestUsers.Add(1))
+				called := 0
+				router := gin.New()
+				router.POST("/v1/chat/completions", func(c *gin.Context) {
+					c.Set("id", userID)
+					common.SetContextKey(c, constant.ContextKeyUserGroup, c.GetHeader("X-Test-Group"))
+					common.SetContextKey(c, constant.ContextKeyTokenGroup, "auto")
+				}, ModelRequestRateLimit(), func(c *gin.Context) { called++; c.Status(http.StatusNoContent) })
+				for range 2 {
+					request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(fmt.Sprintf(`{"model":"test","stream":%t}`, tc.stream)))
+					request.Header.Set("Content-Type", "application/json")
+					request.Header.Set("X-Test-Group", "High Risk")
+					response := httptest.NewRecorder()
+					router.ServeHTTP(response, request)
+					assert.Equal(t, tc.status, response.Code)
+					if tc.status == http.StatusOK {
+						assert.Contains(t, response.Body.String(), "Contact support")
+						if tc.stream {
+							assert.Contains(t, response.Body.String(), "[DONE]")
+						}
+					} else {
+						assert.Contains(t, response.Body.String(), "The service is currently overloaded.")
+					}
+				}
+				assert.Zero(t, called, "even the first request must never reach upstream or its usage logs")
+				if backend == "redis" {
+					stats, err := service.GetUserGroupRateLimitStats(context.Background())
+					require.NoError(t, err)
+					if tc.status == http.StatusOK {
+						assert.EqualValues(t, 2, stats.Counts["High Risk"])
+						assert.Empty(t, stats.RejectedCounts)
+					} else {
+						assert.EqualValues(t, 2, stats.RejectedCounts["High Risk"])
+						assert.Empty(t, stats.Counts)
+					}
+				}
+				request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+				request.Header.Set("X-Test-Group", "default")
+				response := httptest.NewRecorder()
+				router.ServeHTTP(response, request)
+				assert.Equal(t, http.StatusNoContent, response.Code, "unmatched users keep the original behavior")
+				if tc.name == "429" {
+					if backend != "redis unavailable" {
+						require.NoError(t, setting.UpdateUserGroupRateLimitConfig(strings.Replace(raw, `"max_requests":0`, `"max_requests":1`, 1)))
+						request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+						request.Header.Set("X-Test-Group", "High Risk")
+						response = httptest.NewRecorder()
+						router.ServeHTTP(response, request)
+						assert.Equal(t, http.StatusNoContent, response.Code, "zero-limit rejections must not consume future request slots")
+					}
+					require.NoError(t, setting.UpdateUserGroupRateLimitConfig(strings.Replace(raw, `"enabled":true`, `"enabled":false`, 1)))
+					request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+					request.Header.Set("X-Test-Group", "High Risk")
+					response = httptest.NewRecorder()
+					router.ServeHTTP(response, request)
+					assert.Equal(t, http.StatusNoContent, response.Code, "disabled zero-limit rules must not intercept")
+				}
+			})
+		}
+	}
+}
 
 type failedRateLimitResponseWriter struct{ *httptest.ResponseRecorder }
 

@@ -1,5 +1,6 @@
 {
   "translation": {
+    "Set to 0 to treat every request as over-limit.": "Set to 0 to treat every request as over-limit.",
     "Support tickets": "Support tickets",
     "Subject": "Subject",
     "Submitted by": "Submitted by",

@@ -26,7 +26,7 @@ const storedConfigSchema = z.object({
     z.string(),
     z.object({
       duration_seconds: z.number().int().min(1).max(2592000),
-      max_requests: z.number().int().min(1).max(10000),
+      max_requests: z.number().int().min(0).max(10000),
       custom_response_enabled: z.boolean().optional(),
       custom_response_message: z.string().optional(),
       custom_response_probability: z.number().int().min(0).max(100).nullish(),
@@ -44,7 +44,7 @@ export function createUserGroupRateLimitSchema(t: (key: string) => string) {
             group: z.string().trim().min(1, t('Group name is required')),
             period: z.number().int().min(1, t('Enter a positive integer')),
             unit: z.enum(['seconds', 'minutes', 'hours', 'days']),
-            maxRequests: z.number().int().min(1).max(10000),
+            maxRequests: z.number().int().min(0).max(10000),
             customResponseEnabled: z.boolean(),
             customResponseProbability: z
               .number()
