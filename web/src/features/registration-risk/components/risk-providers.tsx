@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { SettingsControlGroup } from '@/features/system-settings/components/settings-form-layout'
 import { SettingsSection } from '@/features/system-settings/components/settings-section'
 
 import type {
@@ -44,16 +45,31 @@ export function RiskProviders(props: {
   const form = useFormContext<RegistrationRiskFormValues>()
   const providers = [
     {
+      name: 'api_key',
+      toggle: 'proxycheck_enabled',
+      label: 'proxycheck.io',
+      configured: props.settings.api_key_configured,
+      description: t(
+        'Proxy, VPN, Tor, hosting, scraper, risk score and disposable email checks.'
+      ),
+    },
+    {
       name: 'ipapi_key',
       toggle: 'ipapi_enabled',
       label: 'ipapi.is',
       configured: props.settings.ipapi_key_configured,
+      description: t(
+        'Proxy, VPN, Tor, datacenter and known abusive IP checks.'
+      ),
     },
     {
       name: 'vpnapi_key',
       toggle: 'vpnapi_enabled',
       label: 'VPNAPI.io',
       configured: props.settings.vpnapi_key_configured,
+      description: t(
+        'Proxy, VPN, Tor and privacy relay checks. Residential proxy and crawler checks depend on the returned fields.'
+      ),
     },
   ] as const
   return (
@@ -63,54 +79,56 @@ export function RiskProviders(props: {
           'Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.'
         )}
       </p>
-      <RiskSwitch
-        name='proxycheck_enabled'
-        label={t('Enable proxycheck.io')}
-        disabled={props.disabled}
-      />
-      {providers.map((provider) => (
-        <SettingsSection key={provider.name} title={provider.label}>
-          <RiskSwitch
-            name={provider.toggle}
-            label={t('Enable {{provider}}', { provider: provider.label })}
-            disabled={props.disabled}
-          />
-          <FormField
-            control={form.control}
-            name={provider.name}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t('{{provider}} API key', { provider: provider.label })}
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value ?? ''}
-                    type='password'
-                    autoComplete='new-password'
-                    maxLength={256}
-                    disabled={props.disabled}
-                  />
-                </FormControl>
-                <FormDescription>
-                  {provider.configured
-                    ? t(
-                        'API key configured. Leave blank to keep the saved key.'
-                      )
-                    : t('Enter an API key before enabling IP or email checks.')}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </SettingsSection>
-      ))}
-      <p className='text-muted-foreground text-xs'>
-        {t(
-          'Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.'
-        )}
-      </p>
+      <div className='grid min-w-0 gap-4 xl:grid-cols-3'>
+        {providers.map((provider) => (
+          <SettingsControlGroup
+            key={provider.name}
+            role='group'
+            aria-label={provider.label}
+          >
+            <h4 className='font-medium'>{provider.label}</h4>
+            <RiskSwitch
+              name={provider.toggle}
+              label={t('Enable {{provider}}', { provider: provider.label })}
+              disabled={props.disabled}
+            />
+            <FormField
+              control={form.control}
+              name={provider.name}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t('{{provider}} API key', { provider: provider.label })}
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      value={field.value ?? ''}
+                      type='password'
+                      autoComplete='new-password'
+                      maxLength={256}
+                      disabled={props.disabled}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {provider.configured
+                      ? t(
+                          'API key configured. Leave blank to keep the saved key.'
+                        )
+                      : t(
+                          'Enter an API key before enabling IP or email checks.'
+                        )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <p className='text-muted-foreground text-xs'>
+              {provider.description}
+            </p>
+          </SettingsControlGroup>
+        ))}
+      </div>
     </SettingsSection>
   )
 }

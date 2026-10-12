@@ -36,7 +36,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import {
   SettingsControlGroup,
@@ -135,96 +134,71 @@ export function RegistrationRisk() {
                 'Any enabled risk rule places new accounts in the selected group. IP and subnet association rules also move all related accounts within the window. Existing logins and administrator-created accounts are excluded.'
               )}
             </p>
-            <RiskSwitch
-              name='enabled'
-              label={t('Enable new user risk control')}
-              disabled={disabled}
-            />
-            <FormField
-              control={form.control}
-              name='target_group'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Risk user group')}</FormLabel>
-                  <FormControl>
-                    <NativeSelect
-                      {...field}
-                      value={field.value ?? ''}
-                      disabled={disabled || groups.isPending || groups.isError}
-                      className='w-full'
-                    >
-                      <NativeSelectOption value=''>
-                        {t('Select a risk user group')}
-                      </NativeSelectOption>
-                      {[
-                        ...new Set([
-                          ...(groups.data?.data ?? []),
-                          ...(target ? [target] : []),
-                        ]),
-                      ].map((group) => (
-                        <NativeSelectOption key={group} value={group}>
-                          {group}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Enable a user group rate limit for this group first. Set its maximum requests to 0 to prevent upstream calls.'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name='api_key'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('proxycheck.io API key')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      value={field.value ?? ''}
-                      type='password'
-                      autoComplete='new-password'
-                      maxLength={256}
-                      disabled={disabled}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {apiConfigured
-                      ? t(
-                          'API key configured. Leave blank to keep the saved key.'
-                        )
-                      : t(
-                          'Enter an API key before enabling IP or email checks.'
-                        )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {groups.isError && (
-              <ErrorState
-                title={t('Failed to load groups')}
-                onRetry={() => void groups.refetch()}
+            <SettingsControlGroup>
+              <RiskSwitch
+                name='enabled'
+                label={t('Enable new user risk control')}
+                disabled={disabled}
               />
-            )}
+              <FormField
+                control={form.control}
+                name='target_group'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Risk user group')}</FormLabel>
+                    <FormControl>
+                      <NativeSelect
+                        {...field}
+                        value={field.value ?? ''}
+                        disabled={
+                          disabled || groups.isPending || groups.isError
+                        }
+                        className='w-full'
+                      >
+                        <NativeSelectOption value=''>
+                          {t('Select a risk user group')}
+                        </NativeSelectOption>
+                        {[
+                          ...new Set([
+                            ...(groups.data?.data ?? []),
+                            ...(target ? [target] : []),
+                          ]),
+                        ].map((group) => (
+                          <NativeSelectOption key={group} value={group}>
+                            {group}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Enable a user group rate limit for this group first. Set its maximum requests to 0 to prevent upstream calls.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {groups.isError && (
+                <ErrorState
+                  title={t('Failed to load groups')}
+                  onRetry={() => void groups.refetch()}
+                />
+              )}
+              {target === settings.data.config.target_group && target && (
+                <p className='text-muted-foreground text-sm'>
+                  {settings.data.target_limit_enabled
+                    ? t('The selected group has an active rate limit.')
+                    : t('The selected group has no active rate limit.')}
+                </p>
+              )}
+            </SettingsControlGroup>
             {!settings.data.redis_enabled && (
               <p role='alert' className='text-destructive text-sm'>
                 {t('Redis is required for IP and subnet association checks.')}
               </p>
             )}
             <RiskProviders settings={settings.data} disabled={disabled} />
-            {target === settings.data.config.target_group && target && (
-              <p className='text-muted-foreground text-sm'>
-                {settings.data.target_limit_enabled
-                  ? t('The selected group has an active rate limit.')
-                  : t('The selected group has no active rate limit.')}
-              </p>
-            )}
             <SettingsControlGroup>
               <SettingsSection title={t('IP and email risk rules')}>
                 <RiskSwitch

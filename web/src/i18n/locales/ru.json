@@ -7090,7 +7090,19 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Intelligence providers": "Поставщики данных",
+    "Enable proxycheck.io": "Включить proxycheck.io",
+    "Enable {{provider}}": "Включить {{provider}}",
+    "{{provider}} API key": "Ключ API {{provider}}",
+    "Known abusive IP": "IP с известными злоупотреблениями",
+    "Privacy relay IP": "IP сервиса конфиденциальной ретрансляции",
+    "Residential proxy IP": "IP резидентного прокси",
+    "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Любой включённый поставщик может выявить риск аккаунта. Оценка считается завершённой, только когда все включённые поставщики выполнят необходимые проверки.",
+    "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is проверяет известные IP со злоупотреблениями, VPNAPI.io — конфиденциальные ретрансляторы, proxycheck.io — оценки риска и одноразовую почту. Поля резидентных прокси и роботов проверяются, если VPNAPI.io их возвращает.",
+    "Proxy, VPN, Tor, hosting, scraper, risk score and disposable email checks.": "Проверка прокси, VPN, Tor, хостинга, сборщиков данных, оценки риска и временной почты.",
+    "Proxy, VPN, Tor, datacenter and known abusive IP checks.": "Проверка прокси, VPN, Tor, дата-центров и IP с известными злоупотреблениями.",
+    "Proxy, VPN, Tor and privacy relay checks. Residential proxy and crawler checks depend on the returned fields.": "Проверка прокси, VPN, Tor и приватных ретрансляторов. Проверки резидентных прокси и роботов зависят от возвращаемых полей."
   },
   "USDT payment": "Оплата USDT",
   "Check payment status": "Проверить оплату",
@@ -7100,14 +7112,5 @@
   "USDT network fee notice": "Только USDT в сети TRON (TRC20). Комиссия оплачивается отдельно; на адрес должна поступить вся указанная сумма.",
   "Order expires in": "Осталось для перевода",
   "Payment not confirmed yet": "Оплата все еще обрабатывается. История обновится после завершения.",
-  "USDT payment deadline warning": "Завершите перевод до истечения срока заказа. Учтите время обработки кошельком или биржей и подтверждения в блокчейне. Поздний платёж может не зачислиться. Не оплачивайте просроченный заказ.",
-  "Intelligence providers": "Поставщики данных",
-  "Enable proxycheck.io": "Включить proxycheck.io",
-  "Enable {{provider}}": "Включить {{provider}}",
-  "{{provider}} API key": "Ключ API {{provider}}",
-  "Known abusive IP": "IP с известными злоупотреблениями",
-  "Privacy relay IP": "IP сервиса конфиденциальной ретрансляции",
-  "Residential proxy IP": "IP резидентного прокси",
-  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Любой включённый поставщик может выявить риск аккаунта. Оценка считается завершённой, только когда все включённые поставщики выполнят необходимые проверки.",
-  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is проверяет известные IP со злоупотреблениями, VPNAPI.io — конфиденциальные ретрансляторы, proxycheck.io — оценки риска и одноразовую почту. Поля резидентных прокси и роботов проверяются, если VPNAPI.io их возвращает."
+  "USDT payment deadline warning": "Завершите перевод до истечения срока заказа. Учтите время обработки кошельком или биржей и подтверждения в блокчейне. Поздний платёж может не зачислиться. Не оплачивайте просроченный заказ."
 }

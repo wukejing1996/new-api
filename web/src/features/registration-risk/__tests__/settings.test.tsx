@@ -17,10 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { createInstance } from 'i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import en from '@/i18n/locales/en.json'
+import fr from '@/i18n/locales/fr.json'
+import ja from '@/i18n/locales/ja.json'
+import ru from '@/i18n/locales/ru.json'
+import viLocale from '@/i18n/locales/vi.json'
+import zhTW from '@/i18n/locales/zh-TW.json'
+import zhCN from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 
 import { RegistrationRisk } from '../index'
@@ -93,6 +107,40 @@ beforeEach(() => {
 })
 
 describe('registration risk settings', () => {
+  it('keeps every provider switch and credential inside its named settings group', async () => {
+    fixture()
+    await screen.findByLabelText('proxycheck.io API key')
+    for (const provider of ['proxycheck.io', 'ipapi.is', 'VPNAPI.io']) {
+      const group = screen.getByRole('group', { name: provider })
+      expect(
+        within(group).getByRole('switch', { name: `Enable ${provider}` })
+      ).toBeVisible()
+      expect(within(group).getByLabelText(`${provider} API key`)).toBeVisible()
+    }
+  })
+
+  it('loads provider translations from the actual language resources', async () => {
+    const translation = createInstance()
+    await translation.init({
+      resources: { en, zhCN, zhTW, fr, ru, ja, vi: viLocale },
+      lng: 'zhCN',
+      fallbackLng: false,
+      nsSeparator: false,
+    })
+    for (const language of ['en', 'zhCN', 'zhTW', 'fr', 'ru', 'ja', 'vi']) {
+      expect(
+        translation.exists('Intelligence providers', { lng: language })
+      ).toBe(true)
+      expect(translation.exists('Enable {{provider}}', { lng: language })).toBe(
+        true
+      )
+    }
+    expect(translation.t('Intelligence providers')).toBe('情报服务商')
+    expect(translation.t('Enable {{provider}}', { provider: 'ipapi.is' })).toBe(
+      '启用 ipapi.is'
+    )
+  })
+
   it('saves new provider credentials once and preserves blank keys on the next save', async () => {
     const user = userEvent.setup()
     settings.ipapi_key_configured = true

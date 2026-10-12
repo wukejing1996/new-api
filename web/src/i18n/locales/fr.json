@@ -7090,7 +7090,19 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Intelligence providers": "Fournisseurs de renseignement",
+    "Enable proxycheck.io": "Activer proxycheck.io",
+    "Enable {{provider}}": "Activer {{provider}}",
+    "{{provider}} API key": "Clé API {{provider}}",
+    "Known abusive IP": "IP connue pour des abus",
+    "Privacy relay IP": "IP de relais de confidentialité",
+    "Residential proxy IP": "IP de proxy résidentiel",
+    "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Tout fournisseur activé peut signaler un compte. Tous les fournisseurs activés doivent terminer leurs vérifications requises pour que l’évaluation soit complète.",
+    "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is détecte les IP connues pour des abus. VPNAPI.io détecte les relais de confidentialité. proxycheck.io fournit les scores de risque et vérifie les e-mails jetables. Les champs de proxy résidentiel et de robot sont évalués si VPNAPI.io les fournit.",
+    "Proxy, VPN, Tor, hosting, scraper, risk score and disposable email checks.": "Détection des proxys, VPN, Tor, hébergements, robots, scores de risque et e-mails jetables.",
+    "Proxy, VPN, Tor, datacenter and known abusive IP checks.": "Détection des proxys, VPN, Tor, centres de données et IP connues pour des abus.",
+    "Proxy, VPN, Tor and privacy relay checks. Residential proxy and crawler checks depend on the returned fields.": "Détection des proxys, VPN, Tor et relais de confidentialité. Les proxys résidentiels et robots sont vérifiés selon les champs renvoyés."
   },
   "USDT payment": "Paiement USDT",
   "Check payment status": "Vérifier le paiement",
@@ -7100,14 +7112,5 @@
   "USDT network fee notice": "Utilisez uniquement USDT sur TRON (TRC20). Les frais sont séparés ; le montant affiché doit parvenir intégralement à cette adresse.",
   "Order expires in": "Temps restant",
   "Payment not confirmed yet": "Le paiement est toujours en cours de traitement. L'historique se mettra à jour une fois terminé.",
-  "USDT payment deadline warning": "Effectuez le transfert avant l’expiration de la commande. Prévoyez le délai de traitement du portefeuille ou de la plateforme et de confirmation sur la blockchain. Un paiement tardif peut ne pas être crédité. Ne payez pas une commande expirée.",
-  "Intelligence providers": "Fournisseurs de renseignement",
-  "Enable proxycheck.io": "Activer proxycheck.io",
-  "Enable {{provider}}": "Activer {{provider}}",
-  "{{provider}} API key": "Clé API {{provider}}",
-  "Known abusive IP": "IP connue pour des abus",
-  "Privacy relay IP": "IP de relais de confidentialité",
-  "Residential proxy IP": "IP de proxy résidentiel",
-  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Tout fournisseur activé peut signaler un compte. Tous les fournisseurs activés doivent terminer leurs vérifications requises pour que l’évaluation soit complète.",
-  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is détecte les IP connues pour des abus. VPNAPI.io détecte les relais de confidentialité. proxycheck.io fournit les scores de risque et vérifie les e-mails jetables. Les champs de proxy résidentiel et de robot sont évalués si VPNAPI.io les fournit."
+  "USDT payment deadline warning": "Effectuez le transfert avant l’expiration de la commande. Prévoyez le délai de traitement du portefeuille ou de la plateforme et de confirmation sur la blockchain. Un paiement tardif peut ne pas être crédité. Ne payez pas une commande expirée."
 }
