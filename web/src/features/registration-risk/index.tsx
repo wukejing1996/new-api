@@ -70,7 +70,7 @@ export function RegistrationRisk() {
   const settings = useQuery({ queryKey, queryFn: getRegistrationRiskSettings })
   const groups = useQuery({
     queryKey: ['groups'],
-    queryFn: async () => requireServerSuccess(await getGroups()).data,
+    queryFn: async () => requireServerSuccess(await getGroups()),
   })
   const form = useForm<RegistrationRiskFormValues>({
     resolver: zodResolver(createRegistrationRiskFormSchema(t)),
@@ -140,7 +140,7 @@ export function RegistrationRisk() {
                       </NativeSelectOption>
                       {[
                         ...new Set([
-                          ...(groups.data ?? []),
+                          ...(groups.data?.data ?? []),
                           ...(target ? [target] : []),
                         ]),
                       ].map((group) => (

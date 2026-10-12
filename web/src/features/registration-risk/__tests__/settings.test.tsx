@@ -33,10 +33,11 @@ vi.mock('@/lib/api', () => ({
 const endpoint = '/api/option/registration_risk'
 let settings: RegistrationRiskSettings
 
-function fixture() {
-  const client = new QueryClient({
+function fixture(
+  client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+) {
   render(
     <QueryClientProvider client={client}>
       <RegistrationRisk />
@@ -87,6 +88,24 @@ beforeEach(() => {
 })
 
 describe('registration risk settings', () => {
+  it('reuses groups cached by other admin pages and preserves their response format', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    })
+    const cachedGroups = { success: true, data: ['default', 'High Risk'] }
+    client.setQueryData(['groups'], cachedGroups)
+    fixture(client)
+
+    const group = await screen.findByRole('combobox', { name: 'Risk user group' })
+    await waitFor(() => expect(group).toHaveValue('High Risk'))
+    expect(screen.getByRole('option', { name: 'default' })).toBeVisible()
+    expect(screen.getByRole('option', { name: 'High Risk' })).toBeVisible()
+
+    await client.invalidateQueries({ queryKey: ['groups'] })
+    expect(client.getQueryData(['groups'])).toEqual(cachedGroups)
+    expect(group).toHaveValue('High Risk')
+  })
+
   it('saves selected rules while preserving a blank configured API key', async () => {
     const user = userEvent.setup()
     fixture()
