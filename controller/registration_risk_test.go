@@ -186,6 +186,39 @@ func mockRegistrationIntelligence(t *testing.T, ipResult, emailResult string, ca
 }
 
 func TestRegistrationRiskIntelligence(t *testing.T) {
+	t.Run("v3 email detections distinguish safe disposable and unknown results", func(t *testing.T) {
+		ordinary, disposable := false, true
+		for _, tc := range []struct {
+			name, emailResult string
+			disposable        *bool
+		}{
+			{"ordinary mailbox", `{"detections":{"disposable":false}}`, &ordinary},
+			{"disposable mailbox", `{"detections":{"disposable":true}}`, &disposable},
+			{"missing field", `{"detections":{}}`, nil},
+			{"null field", `{"detections":{"disposable":null}}`, nil},
+			{"invalid type", `{"detections":{"disposable":"false"}}`, nil},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				_, cfg := setupRegistrationRisk(t, false)
+				var calls atomic.Int32
+				mockRegistrationIntelligence(t, safeRegistrationIP, tc.emailResult, &calls)
+				result := service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "mailbox@163.com", cfg, "test-secret-key")
+				assert.Equal(t, tc.disposable, result.Disposable)
+				assert.Equal(t, tc.disposable == nil, result.Incomplete)
+				if tc.disposable == nil {
+					assert.True(t, result.Restricted)
+					assert.Equal(t, []string{"email_assessment_unavailable"}, result.Reasons)
+				} else {
+					assert.Equal(t, *tc.disposable, result.Restricted)
+					if *tc.disposable {
+						assert.Equal(t, []string{"disposable_email"}, result.Reasons)
+					} else {
+						assert.Empty(t, result.Reasons)
+					}
+				}
+			})
+		}
+	})
 	t.Run("unavailable intelligence never becomes a clean assessment", func(t *testing.T) {
 		_, cfg := setupRegistrationRisk(t, false)
 		cfg.DisposableEmail = false
@@ -221,16 +254,16 @@ func TestRegistrationRiskIntelligence(t *testing.T) {
 		name, ip, email, reason string
 		restricted, incomplete  bool
 	}{
-		{"safe residential", safeRegistrationIP, `{"disposable":"no"}`, "", false, false},
-		{"proxy", strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"disposable":"no"}`, "proxy_ip", true, false},
-		{"vpn", strings.Replace(safeRegistrationIP, `"vpn":false`, `"vpn":true`, 1), `{"disposable":"no"}`, "vpn_ip", true, false},
-		{"tor", strings.Replace(safeRegistrationIP, `"tor":false`, `"tor":true`, 1), `{"disposable":"no"}`, "tor_ip", true, false},
-		{"hosting network", strings.Replace(safeRegistrationIP, "Residential", "Hosting", 1), `{"disposable":"no"}`, "hosting_network", true, false},
-		{"hosting flag", strings.Replace(safeRegistrationIP, `"hosting":false`, `"hosting":true`, 1), `{"disposable":"no"}`, "hosting_ip", true, false},
-		{"scraper", strings.Replace(safeRegistrationIP, `"scraper":false`, `"scraper":true`, 1), `{"disposable":"no"}`, "scraper_ip", true, false},
-		{"score boundary", strings.Replace(safeRegistrationIP, `"risk":0`, `"risk":50`, 1), `{"disposable":"no"}`, "ip_risk_score", true, false},
-		{"disposable", safeRegistrationIP, `{"disposable":"yes"}`, "disposable_email", true, false},
-		{"missing ip fields", `{}`, `{"disposable":"no"}`, "proxy_ip_unknown", true, true},
+		{"safe residential", safeRegistrationIP, `{"detections":{"disposable":false}}`, "", false, false},
+		{"proxy", strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"detections":{"disposable":false}}`, "proxy_ip", true, false},
+		{"vpn", strings.Replace(safeRegistrationIP, `"vpn":false`, `"vpn":true`, 1), `{"detections":{"disposable":false}}`, "vpn_ip", true, false},
+		{"tor", strings.Replace(safeRegistrationIP, `"tor":false`, `"tor":true`, 1), `{"detections":{"disposable":false}}`, "tor_ip", true, false},
+		{"hosting network", strings.Replace(safeRegistrationIP, "Residential", "Hosting", 1), `{"detections":{"disposable":false}}`, "hosting_network", true, false},
+		{"hosting flag", strings.Replace(safeRegistrationIP, `"hosting":false`, `"hosting":true`, 1), `{"detections":{"disposable":false}}`, "hosting_ip", true, false},
+		{"scraper", strings.Replace(safeRegistrationIP, `"scraper":false`, `"scraper":true`, 1), `{"detections":{"disposable":false}}`, "scraper_ip", true, false},
+		{"score boundary", strings.Replace(safeRegistrationIP, `"risk":0`, `"risk":50`, 1), `{"detections":{"disposable":false}}`, "ip_risk_score", true, false},
+		{"disposable", safeRegistrationIP, `{"detections":{"disposable":true}}`, "disposable_email", true, false},
+		{"missing ip fields", `{}`, `{"detections":{"disposable":false}}`, "proxy_ip_unknown", true, true},
 		{"missing email result", safeRegistrationIP, `{}`, "email_assessment_unavailable", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -248,7 +281,7 @@ func TestRegistrationRiskIntelligence(t *testing.T) {
 	t.Run("cache avoids repeated queries and isolates api keys", func(t *testing.T) {
 		server, cfg := setupRegistrationRisk(t, false)
 		var calls atomic.Int32
-		mockRegistrationIntelligence(t, safeRegistrationIP, `{"disposable":"no"}`, &calls)
+		mockRegistrationIntelligence(t, safeRegistrationIP, `{"detections":{"disposable":false}}`, &calls)
 		for range 2 {
 			assert.False(t, service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "user@example.com", cfg, "test-secret-key").Restricted)
 		}
@@ -280,7 +313,7 @@ func TestRegistrationRiskAssociations(t *testing.T) {
 			cfg.SubnetRule.TriggerCount = 2
 			setRegistrationRiskConfig(t, cfg)
 			var calls atomic.Int32
-			mockRegistrationIntelligence(t, safeRegistrationIP, `{"disposable":"no"}`, &calls)
+			mockRegistrationIntelligence(t, safeRegistrationIP, `{"detections":{"disposable":false}}`, &calls)
 			create := func(username, ip string) *model.User {
 				user := &model.User{Username: username, Email: username + "@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, AffCode: username}
 				c, _ := registrationRiskContext(ip)
@@ -473,7 +506,7 @@ func TestRegistrationRiskRegistrationPaths(t *testing.T) {
 		common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = previousRegister, previousPassword, previousEmail, previousDefaultToken
 	})
 	var calls atomic.Int32
-	mockRegistrationIntelligence(t, strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"disposable":"no"}`, &calls)
+	mockRegistrationIntelligence(t, strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"detections":{"disposable":false}}`, &calls)
 	c, r := registrationRiskContext("8.8.4.4")
 	c.Request.Body = io.NopCloser(strings.NewReader(`{"username":"risk-password","password":"Password123!"}`))
 	Register(c)

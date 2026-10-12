@@ -131,15 +131,16 @@ func EvaluateRegistrationRisk(ctx context.Context, ip, email string, cfg setting
 		} else {
 			body, err := queryRegistrationRisk(ctx, email, apiKey, cfg)
 			var data struct {
-				Disposable string `json:"disposable"`
+				Detections struct {
+					Disposable *bool `json:"disposable"`
+				} `json:"detections"`
 			}
-			if err != nil || common.Unmarshal(body, &data) != nil || (data.Disposable != "yes" && data.Disposable != "no") {
+			if err != nil || common.Unmarshal(body, &data) != nil || data.Detections.Disposable == nil {
 				result.Incomplete = true
 				result.Reasons = append(result.Reasons, "email_assessment_unavailable")
 			} else {
-				disposable := data.Disposable == "yes"
-				result.Disposable = &disposable
-				if disposable {
+				result.Disposable = data.Detections.Disposable
+				if *result.Disposable {
 					result.Restricted = true
 					result.Reasons = append(result.Reasons, "disposable_email")
 				}

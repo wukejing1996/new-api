@@ -94,6 +94,37 @@ func performManageUserRequest(t *testing.T, body string) *httptest.ResponseRecor
 	return recorder
 }
 
+func TestUserEditSessionRevocationPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name, previous, next string
+		passwordChanged      bool
+		revoke               bool
+	}{
+		{"exact risk group", "default", "High Risk", false, false},
+		{"risk registration prefix", "default", "High Risk Registration", false, false},
+		{"leaving risk prefix", "High Risk Registration", "vip", false, false},
+		{"between risk groups", "High Risk Registration", "High Risk API", false, false},
+		{"case and spaces", "default", "  HIGH  risk Registration  ", false, false},
+		{"unicode whitespace", "default", "\ufeffHigh\u00a0Risk\u3000Registration", false, false},
+		{"ordinary group", "default", "vip", false, true},
+		{"risk in middle", "default", "Review High Risk", false, true},
+		{"missing boundary", "default", "High Risky", false, true},
+		{"hyphen boundary", "default", "High Risk-Registration", false, true},
+		{"unchanged group", "vip", "vip", false, false},
+		{"password entering risk", "default", "High Risk Registration", true, true},
+		{"password leaving risk", "High Risk Registration", "default", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			current := model.User{Group: tc.previous, Password: "old-hash"}
+			updated := model.User{Group: tc.next, Password: "old-hash"}
+			if tc.passwordChanged {
+				updated.Password = "new-hash"
+			}
+			assert.Equal(t, tc.revoke, model.UserEditNeedsSessionRevocation(current, updated, tc.passwordChanged))
+		})
+	}
+}
+
 func TestUpdateUserHighRiskGroupPreservesSessions(t *testing.T) {
 	previousMaster := common.IsMasterNode
 	common.IsMasterNode = false
@@ -106,9 +137,13 @@ func TestUpdateUserHighRiskGroupPreservesSessions(t *testing.T) {
 			{"high risk only", "default", "High Risk", "", false},
 			{"from high risk to default", "High Risk", "default", "", false},
 			{"from high risk to other group", "High Risk", "vip", "", false},
+			{"risk registration prefix", "default", "High Risk Registration", "", false},
+			{"from risk prefix", "High Risk Registration", "default", "", false},
+			{"between risk prefixes", "High Risk Registration", "High Risk API", "", false},
 			{"other group", "default", "vip", "", true},
 			{"high risk with password change", "default", "High Risk", "NewPassword123", true},
 			{"from high risk with password change", "High Risk", "default", "NewPassword123", true},
+			{"risk prefix with password change", "default", "High Risk Registration", "NewPassword123", true},
 		} {
 			t.Run(fmt.Sprintf("%s/redis=%t", tc.name, redisEnabled), func(t *testing.T) {
 				db := setupManageUserTestDB(t)

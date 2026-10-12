@@ -902,7 +902,7 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 		return err
 	}
 	// Moving to or from High Risk changes request policy without invalidating login sessions.
-	authChanged := (updatePassword && current.Password != newUser.Password) || (current.Group != newUser.Group && current.Group != "High Risk" && newUser.Group != "High Risk")
+	authChanged := UserEditNeedsSessionRevocation(current, newUser, updatePassword)
 	if authChanged {
 		newUser.AuthVersion, err = IncrementUserAuthVersionWithTx(tx, user.Id)
 		if err != nil {
