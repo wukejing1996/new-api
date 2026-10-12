@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -158,6 +159,8 @@ func InitOptionMap() {
 	common.OptionMap["ModelRequestRateLimitSuccessCount"] = strconv.Itoa(setting.ModelRequestRateLimitSuccessCount)
 	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
 	common.OptionMap[setting.UserGroupRateLimitOptionKey] = setting.UserGroupRateLimitConfigJSON()
+	common.OptionMap[setting.RegistrationRiskOptionKey] = setting.RegistrationRiskConfigJSON()
+	common.OptionMap[setting.RegistrationRiskAPIKeyOptionKey] = ""
 	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
 	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
 	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
@@ -237,6 +240,18 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == setting.RegistrationRiskOptionKey {
+		cfg, err := setting.ParseRegistrationRiskConfig(value)
+		if err != nil {
+			return err
+		}
+		return ValidateRegistrationRiskTarget(cfg)
+	}
+	if key == setting.RegistrationRiskAPIKeyOptionKey {
+		if len(value) > 256 || strings.ContainsAny(value, "\r\n\t ") {
+			return fmt.Errorf("invalid proxycheck API key")
+		}
+	}
 	if err := setting.ValidateUsdtOption(key, value); err != nil {
 		return err
 	}
@@ -654,6 +669,10 @@ func updateOptionMap(key string, value string) (err error) {
 		err = setting.UpdateModelRequestRateLimitGroupByJSONString(value)
 	case setting.UserGroupRateLimitOptionKey:
 		err = setting.UpdateUserGroupRateLimitConfig(value)
+	case setting.RegistrationRiskOptionKey:
+		err = setting.UpdateRegistrationRiskConfig(value)
+	case setting.RegistrationRiskAPIKeyOptionKey:
+		err = setting.UpdateRegistrationRiskAPIKey(value)
 	case "RetryTimes":
 		common.RetryTimes, _ = strconv.Atoi(value)
 	case "DataExportInterval":

@@ -247,6 +247,10 @@ func SetApiRouter(router *gin.Engine) {
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{
+			optionRoute.GET("/registration_risk", controller.GetRegistrationRiskSettings)
+			optionRoute.GET("/registration_risk/records", controller.GetRegistrationRiskRecords)
+			optionRoute.PUT("/registration_risk", controller.UpdateRegistrationRiskSettings)
+			optionRoute.POST("/registration_risk/test", middleware.UserCriticalRateLimit("registration-risk-test"), controller.TestRegistrationRiskQuery)
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.GET("/user_group_rate_limit/stats", controller.GetUserGroupRateLimitStats)
 			optionRoute.GET("/request_policy", controller.GetRequestPolicy)

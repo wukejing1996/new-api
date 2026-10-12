@@ -154,6 +154,12 @@ export function useSidebarData(): SidebarData {
             requiredRole: ROLE.ADMIN,
           },
           {
+            title: t('New User Risk Control'),
+            url: '/registration-risk',
+            icon: ShieldCheck,
+            requiredRole: ROLE.SUPER_ADMIN,
+          },
+          {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,
