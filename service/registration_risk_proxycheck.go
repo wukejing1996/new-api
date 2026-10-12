@@ -65,7 +65,7 @@ func queryRegistrationRisk(ctx context.Context, address, apiKey string, cfg sett
 	return result, nil
 }
 
-func EvaluateRegistrationRisk(ctx context.Context, ip, email string, cfg setting.RegistrationRiskConfig, apiKey string) RegistrationRiskAssessment {
+func evaluateProxycheckRegistrationRisk(ctx context.Context, ip, email string, cfg setting.RegistrationRiskConfig, apiKey string) RegistrationRiskAssessment {
 	result := RegistrationRiskAssessment{Reasons: []string{}}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(cfg.TimeoutSeconds)*time.Second)
 	defer cancel()

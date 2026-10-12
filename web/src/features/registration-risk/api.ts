@@ -20,10 +20,11 @@ import { api } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type { RiskLog, RiskRecordFilters } from './lib/records'
-import type {
-  RegistrationRiskConfig,
-  RegistrationRiskSettings,
-  RiskAssessment,
+import {
+  registrationRiskSchema,
+  type RegistrationRiskConfig,
+  type RegistrationRiskSettings,
+  type RiskAssessment,
 } from './lib/schema'
 
 type Envelope<T> = { success: boolean; message: string; data: T }
@@ -39,16 +40,31 @@ export async function getRegistrationRiskRecords(params: RiskRecordFilters) {
 
 export async function getRegistrationRiskSettings() {
   const response = await api.get<Envelope<RegistrationRiskSettings>>(endpoint)
-  return requireServerSuccess(response.data).data
+  const settings = requireServerSuccess(response.data).data
+  return {
+    ...settings,
+    config: registrationRiskSchema.parse({
+      ...settings.config,
+      proxycheck_enabled: settings.config.proxycheck_enabled ?? true,
+      ipapi_enabled: settings.config.ipapi_enabled ?? false,
+      vpnapi_enabled: settings.config.vpnapi_enabled ?? false,
+      abuser: settings.config.abuser ?? true,
+      relay: settings.config.relay ?? true,
+    }),
+  }
 }
 
 export async function saveRegistrationRiskSettings(
   config: RegistrationRiskConfig,
-  apiKey: string
+  apiKey: string,
+  ipapiKey = '',
+  vpnapiKey = ''
 ) {
   const response = await api.put<Envelope<RegistrationRiskSettings>>(endpoint, {
     config,
     ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+    ...(ipapiKey.trim() ? { ipapi_key: ipapiKey.trim() } : {}),
+    ...(vpnapiKey.trim() ? { vpnapi_key: vpnapiKey.trim() } : {}),
   })
   return requireServerSuccess(response.data).data
 }

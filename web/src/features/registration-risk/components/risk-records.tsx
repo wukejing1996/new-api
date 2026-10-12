@@ -177,6 +177,27 @@ function RiskRecordDetails(props: { entry: RiskLog }) {
               />
             )}
           </DetailSection>
+          {record.assessment.providers?.map((provider) => (
+            <DetailSection key={provider.provider} label={provider.provider}>
+              <DetailRow
+                label={t('Matched risk signals')}
+                value={
+                  provider.reasons
+                    .map((reason) => riskReasonLabel(reason, t))
+                    .join(' · ') || t('No enabled risk rule matched')
+                }
+              />
+              <DetailRow
+                label={t('Risk assessment incomplete')}
+                value={yesNo(provider.incomplete)}
+              />
+              <AuditDetailValue
+                label={t('IP intelligence result')}
+                value={JSON.stringify(provider, null, 2)}
+                mono
+              />
+            </DetailSection>
+          ))}
           <DetailSection label={t('Policy snapshot')}>
             <AuditDetailValue
               label={t('Policy snapshot')}

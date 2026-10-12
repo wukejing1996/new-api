@@ -18,23 +18,28 @@ type RegistrationAssociationRule struct {
 }
 
 type RegistrationRiskConfig struct {
-	Enabled          bool                        `json:"enabled"`
-	TargetGroup      string                      `json:"target_group"`
-	Proxy            bool                        `json:"proxy"`
-	VPN              bool                        `json:"vpn"`
-	Tor              bool                        `json:"tor"`
-	Hosting          bool                        `json:"hosting"`
-	Scraper          bool                        `json:"scraper"`
-	RiskScoreEnabled bool                        `json:"risk_score_enabled"`
-	RiskThreshold    int                         `json:"risk_threshold"`
-	DisposableEmail  bool                        `json:"disposable_email"`
-	FailClosed       bool                        `json:"fail_closed"`
-	TimeoutSeconds   int                         `json:"timeout_seconds"`
-	CacheSeconds     int                         `json:"cache_seconds"`
-	IPRule           RegistrationAssociationRule `json:"ip_rule"`
-	SubnetRule       RegistrationAssociationRule `json:"subnet_rule"`
-	IPv4Prefix       int                         `json:"ipv4_prefix"`
-	IPv6Prefix       int                         `json:"ipv6_prefix"`
+	Enabled           bool                        `json:"enabled"`
+	ProxycheckEnabled bool                        `json:"proxycheck_enabled"`
+	IPAPIEnabled      bool                        `json:"ipapi_enabled"`
+	VPNAPIEnabled     bool                        `json:"vpnapi_enabled"`
+	Abuser            bool                        `json:"abuser"`
+	Relay             bool                        `json:"relay"`
+	TargetGroup       string                      `json:"target_group"`
+	Proxy             bool                        `json:"proxy"`
+	VPN               bool                        `json:"vpn"`
+	Tor               bool                        `json:"tor"`
+	Hosting           bool                        `json:"hosting"`
+	Scraper           bool                        `json:"scraper"`
+	RiskScoreEnabled  bool                        `json:"risk_score_enabled"`
+	RiskThreshold     int                         `json:"risk_threshold"`
+	DisposableEmail   bool                        `json:"disposable_email"`
+	FailClosed        bool                        `json:"fail_closed"`
+	TimeoutSeconds    int                         `json:"timeout_seconds"`
+	CacheSeconds      int                         `json:"cache_seconds"`
+	IPRule            RegistrationAssociationRule `json:"ip_rule"`
+	SubnetRule        RegistrationAssociationRule `json:"subnet_rule"`
+	IPv4Prefix        int                         `json:"ipv4_prefix"`
+	IPv6Prefix        int                         `json:"ipv6_prefix"`
 }
 
 var registrationRiskMutex sync.RWMutex
@@ -43,6 +48,7 @@ var registrationRiskAPIKey string
 
 func DefaultRegistrationRiskConfig() RegistrationRiskConfig {
 	return RegistrationRiskConfig{
+		ProxycheckEnabled: true, Abuser: true, Relay: true,
 		Proxy: true, VPN: true, Tor: true, Hosting: true, Scraper: true,
 		RiskScoreEnabled: true, RiskThreshold: 50, DisposableEmail: true, FailClosed: true,
 		TimeoutSeconds: 5, CacheSeconds: 300, IPv4Prefix: 24, IPv6Prefix: 64,

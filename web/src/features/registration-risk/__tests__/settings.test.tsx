@@ -50,6 +50,11 @@ beforeEach(() => {
   settings = {
     config: {
       enabled: false,
+      proxycheck_enabled: true,
+      ipapi_enabled: false,
+      vpnapi_enabled: false,
+      abuser: true,
+      relay: true,
       target_group: 'High Risk',
       proxy: true,
       vpn: true,
@@ -88,6 +93,42 @@ beforeEach(() => {
 })
 
 describe('registration risk settings', () => {
+  it('saves new provider credentials once and preserves blank keys on the next save', async () => {
+    const user = userEvent.setup()
+    settings.ipapi_key_configured = true
+    settings.vpnapi_key_configured = true
+    fixture()
+    const ipapiKey = await screen.findByLabelText('ipapi.is API key')
+    const vpnapiKey = screen.getByLabelText('VPNAPI.io API key')
+    expect(ipapiKey).toHaveValue('')
+    expect(vpnapiKey).toHaveAttribute('type', 'password')
+    await user.click(screen.getByRole('switch', { name: 'Enable ipapi.is' }))
+    await user.click(screen.getByRole('switch', { name: 'Enable VPNAPI.io' }))
+    await user.type(ipapiKey, 'new-ipapi-key')
+    await user.type(vpnapiKey, 'new-vpnapi-key')
+    await user.click(screen.getByRole('button', { name: 'Save risk settings' }))
+    await waitFor(() =>
+      expect(api.put).toHaveBeenLastCalledWith(endpoint, {
+        config: {
+          ...settings.config,
+          ipapi_enabled: true,
+          vpnapi_enabled: true,
+        },
+        ipapi_key: 'new-ipapi-key',
+        vpnapi_key: 'new-vpnapi-key',
+      })
+    )
+    await waitFor(() => expect(ipapiKey).toHaveValue(''))
+    expect(vpnapiKey).toHaveValue('')
+    await user.click(screen.getByRole('switch', { name: 'Known abusive IP' }))
+    await user.click(screen.getByRole('button', { name: 'Save risk settings' }))
+    await waitFor(() =>
+      expect(api.put).toHaveBeenLastCalledWith(endpoint, {
+        config: { ...settings.config, abuser: false },
+      })
+    )
+  })
+
   it('reuses groups cached by other admin pages and preserves their response format', async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -96,7 +137,9 @@ describe('registration risk settings', () => {
     client.setQueryData(['groups'], cachedGroups)
     fixture(client)
 
-    const group = await screen.findByRole('combobox', { name: 'Risk user group' })
+    const group = await screen.findByRole('combobox', {
+      name: 'Risk user group',
+    })
     await waitFor(() => expect(group).toHaveValue('High Risk'))
     expect(screen.getByRole('option', { name: 'default' })).toBeVisible()
     expect(screen.getByRole('option', { name: 'High Risk' })).toBeVisible()

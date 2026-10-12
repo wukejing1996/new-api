@@ -55,6 +55,7 @@ import {
   saveRegistrationRiskSettings,
 } from './api'
 import { RiskNumber, RiskSwitch } from './components/risk-fields'
+import { RiskProviders } from './components/risk-providers'
 import { RiskQueryTest } from './components/risk-query-test'
 import { RiskRecords } from './components/risk-records'
 import {
@@ -78,22 +79,39 @@ export function RegistrationRisk() {
   })
   const save = useMutation({
     mutationFn: (values: RegistrationRiskFormValues) => {
-      const { api_key, ...config } = values
-      return saveRegistrationRiskSettings(config, api_key)
+      const { api_key, ipapi_key, vpnapi_key, ...config } = values
+      return saveRegistrationRiskSettings(
+        config,
+        api_key,
+        ipapi_key,
+        vpnapi_key
+      )
     },
     onSuccess: (data) => {
       client.setQueryData(queryKey, data)
-      form.reset({ ...data.config, api_key: '' })
+      form.reset({ ...data.config, api_key: '', ipapi_key: '', vpnapi_key: '' })
       toast.success(t('Settings saved'))
     },
   })
   useEffect(() => {
     if (settings.data && !form.formState.isDirty) {
-      form.reset({ ...settings.data.config, api_key: '' })
+      form.reset({
+        ...settings.data.config,
+        api_key: '',
+        ipapi_key: '',
+        vpnapi_key: '',
+      })
     }
   }, [settings.data, form])
   const target = form.watch('target_group')
   const apiConfigured = settings.data?.api_key_configured ?? false
+  const testConfigured = Boolean(
+    ((settings.data?.config.proxycheck_enabled ?? true) && apiConfigured) ||
+    (settings.data?.config.ipapi_enabled &&
+      settings.data.ipapi_key_configured) ||
+    (settings.data?.config.vpnapi_enabled &&
+      settings.data.vpnapi_key_configured)
+  )
   const disabled = save.isPending
   let content
   if (settings.isPending) {
@@ -199,6 +217,7 @@ export function RegistrationRisk() {
                 {t('Redis is required for IP and subnet association checks.')}
               </p>
             )}
+            <RiskProviders settings={settings.data} disabled={disabled} />
             {target === settings.data.config.target_group && target && (
               <p className='text-muted-foreground text-sm'>
                 {settings.data.target_limit_enabled
@@ -236,6 +255,16 @@ export function RegistrationRisk() {
                 <RiskSwitch
                   name='risk_score_enabled'
                   label={t('IP risk score threshold')}
+                  disabled={disabled}
+                />
+                <RiskSwitch
+                  name='abuser'
+                  label={t('Known abusive IP')}
+                  disabled={disabled}
+                />
+                <RiskSwitch
+                  name='relay'
+                  label={t('Privacy relay IP')}
                   disabled={disabled}
                 />
                 <RiskNumber
@@ -363,7 +392,7 @@ export function RegistrationRisk() {
             </Button>
           </SettingsForm>
         </Form>
-        <RiskQueryTest configured={apiConfigured} />
+        <RiskQueryTest configured={testConfigured} />
         <RiskRecords />
       </>
     )

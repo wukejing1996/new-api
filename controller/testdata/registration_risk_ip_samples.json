@@ -1,0 +1,341 @@
+{
+  "observed_at": "2026-10-12T11:37:51.149Z",
+  "samples": [
+    {
+      "ip": "109.110.162.205",
+      "restricted": true,
+      "providers": {
+        "ipapi_is": {
+          "ip": "109.110.162.205",
+          "is_datacenter": true,
+          "is_proxy": true,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": true,
+          "company": {
+            "type": "isp"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "109.110.162.205",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "109.110.162.205": {
+            "network": {
+              "type": "Wireless"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "64.118.152.50",
+      "restricted": true,
+      "providers": {
+        "ipapi_is": {
+          "ip": "64.118.152.50",
+          "is_datacenter": true,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": true,
+          "company": {
+            "type": "hosting"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "64.118.152.50",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "64.118.152.50": {
+            "network": {
+              "type": "Business"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "179.255.132.218",
+      "restricted": true,
+      "providers": {
+        "ipapi_is": {
+          "ip": "179.255.132.218",
+          "is_datacenter": true,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": false,
+          "company": {
+            "type": "hosting"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "179.255.132.218",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "179.255.132.218": {
+            "network": {
+              "type": "Hosting"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": true,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": true,
+              "anonymous": true,
+              "risk": 50,
+              "confidence": 100,
+              "first_seen": "2026-10-12T11:28:46Z",
+              "last_seen": "2026-10-12T11:28:46Z",
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "49.207.130.251",
+      "restricted": false,
+      "providers": {
+        "ipapi_is": {
+          "ip": "49.207.130.251",
+          "is_datacenter": false,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": false,
+          "company": {
+            "type": "isp"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "49.207.130.251",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "49.207.130.251": {
+            "network": {
+              "type": "Residential"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "103.135.8.241",
+      "restricted": false,
+      "providers": {
+        "ipapi_is": {
+          "ip": "103.135.8.241",
+          "is_datacenter": false,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": false,
+          "company": {
+            "type": "isp"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "103.135.8.241",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "103.135.8.241": {
+            "network": {
+              "type": "Business"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "117.233.245.210",
+      "restricted": false,
+      "providers": {
+        "ipapi_is": {
+          "ip": "117.233.245.210",
+          "is_datacenter": false,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": false,
+          "company": {
+            "type": "isp"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "117.233.245.210",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "117.233.245.210": {
+            "network": {
+              "type": "Business"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "ip": "223.185.36.207",
+      "restricted": true,
+      "providers": {
+        "ipapi_is": {
+          "ip": "223.185.36.207",
+          "is_datacenter": false,
+          "is_proxy": false,
+          "is_vpn": false,
+          "is_tor": false,
+          "is_abuser": true,
+          "company": {
+            "type": "isp"
+          }
+        },
+        "vpnapi_io": {
+          "ip": "223.185.36.207",
+          "security": {
+            "vpn": false,
+            "proxy": false,
+            "tor": false,
+            "relay": false
+          }
+        },
+        "proxycheck": {
+          "status": "ok",
+          "223.185.36.207": {
+            "network": {
+              "type": "Business"
+            },
+            "detections": {
+              "proxy": false,
+              "vpn": false,
+              "compromised": false,
+              "scraper": false,
+              "tor": false,
+              "hosting": false,
+              "anonymous": false,
+              "risk": 0,
+              "confidence": 100,
+              "first_seen": null,
+              "last_seen": null,
+              "times_seen": null
+            }
+          }
+        }
+      }
+    }
+  ]
+}

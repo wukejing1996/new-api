@@ -30,11 +30,24 @@ type RegistrationIPResult struct {
 }
 
 type RegistrationRiskAssessment struct {
-	Restricted bool                  `json:"restricted"`
-	Incomplete bool                  `json:"incomplete"`
-	Reasons    []string              `json:"reasons"`
-	IP         *RegistrationIPResult `json:"ip_result,omitempty"`
-	Disposable *bool                 `json:"disposable,omitempty"`
+	Restricted bool                             `json:"restricted"`
+	Incomplete bool                             `json:"incomplete"`
+	Reasons    []string                         `json:"reasons"`
+	IP         *RegistrationIPResult            `json:"ip_result,omitempty"`
+	Disposable *bool                            `json:"disposable,omitempty"`
+	Providers  []RegistrationRiskProviderResult `json:"providers,omitempty"`
+}
+
+// Whitelisted intelligence only: no provider URLs, credentials or raw error bodies.
+type RegistrationRiskProviderResult struct {
+	Provider    string           `json:"provider"`
+	Restricted  bool             `json:"restricted"`
+	Incomplete  bool             `json:"incomplete"`
+	Reasons     []string         `json:"reasons"`
+	Signals     map[string]*bool `json:"signals,omitempty"`
+	Risk        *int             `json:"risk,omitempty"`
+	NetworkType *string          `json:"network_type,omitempty"`
+	Error       string           `json:"error,omitempty"`
 }
 
 // An immutable assessment and processing snapshot, without credentials.

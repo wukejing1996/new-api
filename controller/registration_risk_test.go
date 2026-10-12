@@ -123,6 +123,7 @@ func setupRegistrationRisk(t *testing.T, withDatabase bool) (*miniredis.Miniredi
 		require.NoError(t, model.DB.AutoMigrate(&model.Option{}, &model.RegistrationRiskLog{}))
 	}
 	previousConfig, previousKey := setting.GetRegistrationRiskConfig()
+	previousProviderKeys := setting.GetRegistrationRiskProviderKeys()
 	previousRatios := ratio_setting.GroupRatio2JSONString()
 	previousLimits := setting.UserGroupRateLimitConfigJSON()
 	previousRDB := common.RDB
@@ -142,6 +143,8 @@ func setupRegistrationRisk(t *testing.T, withDatabase bool) (*miniredis.Miniredi
 		raw, _ := common.Marshal(previousConfig)
 		require.NoError(t, setting.UpdateRegistrationRiskConfig(string(raw)))
 		require.NoError(t, setting.UpdateRegistrationRiskAPIKey(previousKey))
+		require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskIPAPIKeyOptionKey, previousProviderKeys.IPAPI))
+		require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskVPNAPIKeyOptionKey, previousProviderKeys.VPNAPI))
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
 		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousLimits))
 	})
@@ -183,6 +186,167 @@ func mockRegistrationIntelligence(t *testing.T, ipResult, emailResult string, ca
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{"status":"ok",%q:%s}`, address, body))), Header: http.Header{}, Request: r}, nil
 	})
+}
+
+func TestRegistrationRiskMultipleProviders(t *testing.T) {
+	_, cfg := setupRegistrationRisk(t, false)
+	cfg.IPAPIEnabled, cfg.VPNAPIEnabled, cfg.DisposableEmail = true, true, false
+	require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskIPAPIKeyOptionKey, "ipapi-test-key"))
+	require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskVPNAPIKeyOptionKey, "vpnapi-test-key"))
+	body, err := os.ReadFile("testdata/registration_risk_ip_samples.json")
+	require.NoError(t, err)
+	var fixtures struct {
+		Samples []struct {
+			IP         string         `json:"ip"`
+			Restricted bool           `json:"restricted"`
+			Providers  map[string]any `json:"providers"`
+		} `json:"samples"`
+	}
+	require.NoError(t, common.Unmarshal(body, &fixtures))
+	for _, sample := range fixtures.Samples {
+		t.Run(sample.IP, func(t *testing.T) {
+			http.DefaultTransport = registrationRiskTransport(func(r *http.Request) (*http.Response, error) {
+				provider := "proxycheck"
+				switch r.URL.Host {
+				case "api.ipapi.is":
+					provider = "ipapi_is"
+				case "vpnapi.io":
+					provider = "vpnapi_io"
+				}
+				data, err := common.Marshal(sample.Providers[provider])
+				if err != nil {
+					return nil, err
+				}
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(data))), Header: http.Header{}, Request: r}, nil
+			})
+			assessment := service.EvaluateRegistrationRisk(context.Background(), sample.IP, "", cfg, "test-secret-key")
+			assert.Equal(t, sample.Restricted, assessment.Restricted)
+			assert.False(t, assessment.Incomplete)
+			require.Len(t, assessment.Providers, 3)
+			assert.Equal(t, "proxycheck.io", assessment.Providers[0].Provider)
+			assert.Equal(t, "ipapi.is", assessment.Providers[1].Provider)
+			assert.Equal(t, "VPNAPI.io", assessment.Providers[2].Provider)
+			if sample.IP == "109.110.162.205" {
+				assert.Contains(t, assessment.Providers[1].Reasons, "proxy_ip")
+				assert.Contains(t, assessment.Providers[1].Reasons, "hosting_ip")
+			}
+			if sample.IP == "223.185.36.207" {
+				assert.Contains(t, assessment.Reasons, "ipapi.is:abuser_ip")
+			}
+			entry := service.NewRegistrationRiskLog(&model.User{Id: 8}, service.RegistrationRiskRecord{AccountCreated: true, Assessment: assessment, Outcome: "restricted"})
+			encoded, err := entry.Details.Value()
+			require.NoError(t, err)
+			var restored model.RegistrationRiskRecord
+			require.NoError(t, restored.Scan(encoded))
+			assert.Equal(t, assessment, restored.Assessment)
+			assert.NotContains(t, encoded, "ipapi-test-key")
+			assert.NotContains(t, encoded, "vpnapi-test-key")
+		})
+	}
+	// Malformed/missing fields and HTTP failures are incomplete, never clean.
+	for _, tc := range []struct {
+		name, body string
+		status     int
+	}{
+		{"quota", `{}`, 429},
+		{"provider error", `{"error":"invalid key"}`, 200},
+		{"missing flags", `{"ip":"8.8.4.4"}`, 200},
+		{"wrong IP", `{"ip":"1.1.1.1","is_proxy":false}`, 200},
+		{"invalid flag type", `{"ip":"8.8.4.4","is_proxy":"false"}`, 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg.CacheSeconds = 0
+			http.DefaultTransport = registrationRiskTransport(func(r *http.Request) (*http.Response, error) {
+				data := tc.body
+				if r.URL.Host == "proxycheck.io" {
+					data = `{"status":"ok","8.8.4.4":` + safeRegistrationIP + `}`
+				}
+				return &http.Response{StatusCode: tc.status, Body: io.NopCloser(strings.NewReader(data)), Header: http.Header{}, Request: r}, nil
+			})
+			assessment := service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "test-secret-key")
+			assert.True(t, assessment.Incomplete)
+			assert.True(t, assessment.Restricted)
+			assert.False(t, assessment.Providers[1].Restricted, "a failed lookup must not be presented as an observed risk")
+			cfg.FailClosed = false
+			assert.False(t, service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "test-secret-key").Restricted)
+			cfg.FailClosed = true
+		})
+	}
+	t.Run("disabled providers do not query or require their credentials", func(t *testing.T) {
+		cfg.ProxycheckEnabled, cfg.IPAPIEnabled, cfg.VPNAPIEnabled = false, false, false
+		var calls atomic.Int32
+		http.DefaultTransport = registrationRiskTransport(func(*http.Request) (*http.Response, error) { calls.Add(1); return nil, errors.New("must not query") })
+		assessment := service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "")
+		assert.False(t, assessment.Restricted)
+		assert.Empty(t, assessment.Providers)
+		assert.Zero(t, calls.Load())
+	})
+	t.Run("VPNAPI flags are independent and unsupported optional fields remain unknown", func(t *testing.T) {
+		providerCfg := cfg
+		providerCfg.CacheSeconds, providerCfg.ProxycheckEnabled, providerCfg.IPAPIEnabled, providerCfg.VPNAPIEnabled = 0, false, false, true
+		for _, tc := range []struct{ field, reason string }{
+			{"vpn", "vpn_ip"}, {"proxy", "proxy_ip"}, {"tor", "tor_ip"}, {"relay", "relay_ip"},
+			{"residential_proxy", "residential_proxy_ip"}, {"crawler", "scraper_ip"},
+		} {
+			t.Run(tc.field, func(t *testing.T) {
+				security := map[string]bool{"vpn": false, "proxy": false, "tor": false, "relay": false}
+				security[tc.field] = true
+				body, err := common.Marshal(map[string]any{"ip": "8.8.4.4", "security": security})
+				require.NoError(t, err)
+				http.DefaultTransport = registrationRiskTransport(func(r *http.Request) (*http.Response, error) {
+					return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{}, Request: r}, nil
+				})
+				assessment := service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", providerCfg, "")
+				assert.True(t, assessment.Restricted)
+				assert.False(t, assessment.Incomplete)
+				assert.Equal(t, []string{"VPNAPI.io:" + tc.reason}, assessment.Reasons)
+				if tc.field == "vpn" {
+					assert.Nil(t, assessment.Providers[0].Signals["residential_proxy"])
+				}
+			})
+		}
+	})
+	t.Run("cached intelligence is re-evaluated after policy changes and isolated by provider key", func(t *testing.T) {
+		cfg.CacheSeconds, cfg.ProxycheckEnabled, cfg.IPAPIEnabled, cfg.VPNAPIEnabled = 300, false, true, false
+		cfg.Abuser = false
+		var calls atomic.Int32
+		http.DefaultTransport = registrationRiskTransport(func(r *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			body := `{"ip":"8.8.4.4","is_vpn":false,"is_proxy":false,"is_tor":false,"is_datacenter":false,"is_abuser":true}`
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}, Request: r}, nil
+		})
+		assert.False(t, service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "").Restricted)
+		cfg.Abuser = true
+		assessment := service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "")
+		assert.True(t, assessment.Restricted)
+		assert.Contains(t, assessment.Reasons, "ipapi.is:abuser_ip")
+		assert.EqualValues(t, 1, calls.Load())
+		require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskIPAPIKeyOptionKey, "replacement-ipapi-key"))
+		service.EvaluateRegistrationRisk(context.Background(), "8.8.4.4", "", cfg, "")
+		assert.EqualValues(t, 2, calls.Load())
+	})
+}
+
+func TestRegistrationRiskProviderSettings(t *testing.T) {
+	_, cfg := setupRegistrationRisk(t, false)
+	legacy, err := setting.ParseRegistrationRiskConfig(`{"enabled":false}`)
+	require.NoError(t, err)
+	assert.True(t, legacy.ProxycheckEnabled)
+	assert.False(t, legacy.IPAPIEnabled)
+	assert.False(t, legacy.VPNAPIEnabled)
+	cfg.IPAPIEnabled, cfg.VPNAPIEnabled = true, true
+	assert.Error(t, setting.ValidateRegistrationRiskProviderKeys(cfg, "proxycheck-key", setting.RegistrationRiskProviderKeys{}))
+	keys := setting.RegistrationRiskProviderKeys{IPAPI: "ipapi-key", VPNAPI: "vpnapi-key"}
+	assert.NoError(t, setting.ValidateRegistrationRiskProviderKeys(cfg, "proxycheck-key", keys))
+	assert.Error(t, setting.ValidateRegistrationRiskProviderKey("secret\nkey"))
+	require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskIPAPIKeyOptionKey, keys.IPAPI))
+	require.NoError(t, setting.UpdateRegistrationRiskProviderKey(setting.RegistrationRiskVPNAPIKeyOptionKey, keys.VPNAPI))
+	c, response := registrationRiskContext("8.8.4.4")
+	GetRegistrationRiskSettings(c)
+	assert.Contains(t, response.Body.String(), `"ipapi_key_configured":true`)
+	assert.Contains(t, response.Body.String(), `"vpnapi_key_configured":true`)
+	assert.NotContains(t, response.Body.String(), keys.IPAPI)
+	assert.NotContains(t, response.Body.String(), keys.VPNAPI)
 }
 
 func TestRegistrationRiskIntelligence(t *testing.T) {

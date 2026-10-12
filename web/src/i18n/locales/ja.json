@@ -7100,5 +7100,14 @@
   "USDT network fee notice": "TRON（TRC20）の USDT のみ対応。送金手数料は別途必要です。表示金額の全額が到着するようにしてください。",
   "Order expires in": "送金期限まで",
   "Payment not confirmed yet": "支払いはまだ処理中です。完了すると請求履歴が更新されます。",
-  "USDT payment deadline warning": "必ず注文の有効期限内に送金を完了してください。ウォレットや取引所の処理とブロックチェーンでの確認に余裕を持たせてください。期限後の送金は残高に反映されない場合があります。期限切れの注文には送金しないでください。"
+  "USDT payment deadline warning": "必ず注文の有効期限内に送金を完了してください。ウォレットや取引所の処理とブロックチェーンでの確認に余裕を持たせてください。期限後の送金は残高に反映されない場合があります。期限切れの注文には送金しないでください。",
+  "Intelligence providers": "情報プロバイダー",
+  "Enable proxycheck.io": "proxycheck.io を有効にする",
+  "Enable {{provider}}": "{{provider}} を有効にする",
+  "{{provider}} API key": "{{provider}} API キー",
+  "Known abusive IP": "既知の不正利用 IP",
+  "Privacy relay IP": "プライバシーリレー IP",
+  "Residential proxy IP": "住宅プロキシ IP",
+  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "有効なプロバイダーのいずれかがリスクを検出すると、アカウントを制限します。評価の完了には、すべての有効なプロバイダーによる必須チェックの完了が必要です。",
+  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "既知の不正利用 IP は ipapi.is、プライバシーリレーは VPNAPI.io、リスクスコアと使い捨てメールは proxycheck.io で確認します。VPNAPI.io が住宅プロキシやクローラーのフィールドを返す場合も、ルールに従って確認します。"
 }

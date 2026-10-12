@@ -7100,5 +7100,14 @@
   "USDT network fee notice": "Только USDT в сети TRON (TRC20). Комиссия оплачивается отдельно; на адрес должна поступить вся указанная сумма.",
   "Order expires in": "Осталось для перевода",
   "Payment not confirmed yet": "Оплата все еще обрабатывается. История обновится после завершения.",
-  "USDT payment deadline warning": "Завершите перевод до истечения срока заказа. Учтите время обработки кошельком или биржей и подтверждения в блокчейне. Поздний платёж может не зачислиться. Не оплачивайте просроченный заказ."
+  "USDT payment deadline warning": "Завершите перевод до истечения срока заказа. Учтите время обработки кошельком или биржей и подтверждения в блокчейне. Поздний платёж может не зачислиться. Не оплачивайте просроченный заказ.",
+  "Intelligence providers": "Поставщики данных",
+  "Enable proxycheck.io": "Включить proxycheck.io",
+  "Enable {{provider}}": "Включить {{provider}}",
+  "{{provider}} API key": "Ключ API {{provider}}",
+  "Known abusive IP": "IP с известными злоупотреблениями",
+  "Privacy relay IP": "IP сервиса конфиденциальной ретрансляции",
+  "Residential proxy IP": "IP резидентного прокси",
+  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Любой включённый поставщик может выявить риск аккаунта. Оценка считается завершённой, только когда все включённые поставщики выполнят необходимые проверки.",
+  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is проверяет известные IP со злоупотреблениями, VPNAPI.io — конфиденциальные ретрансляторы, proxycheck.io — оценки риска и одноразовую почту. Поля резидентных прокси и роботов проверяются, если VPNAPI.io их возвращает."
 }

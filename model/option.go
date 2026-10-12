@@ -161,6 +161,8 @@ func InitOptionMap() {
 	common.OptionMap[setting.UserGroupRateLimitOptionKey] = setting.UserGroupRateLimitConfigJSON()
 	common.OptionMap[setting.RegistrationRiskOptionKey] = setting.RegistrationRiskConfigJSON()
 	common.OptionMap[setting.RegistrationRiskAPIKeyOptionKey] = ""
+	common.OptionMap[setting.RegistrationRiskIPAPIKeyOptionKey] = ""
+	common.OptionMap[setting.RegistrationRiskVPNAPIKeyOptionKey] = ""
 	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
 	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
 	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
@@ -240,6 +242,9 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == setting.RegistrationRiskIPAPIKeyOptionKey || key == setting.RegistrationRiskVPNAPIKeyOptionKey {
+		return setting.ValidateRegistrationRiskProviderKey(value)
+	}
 	if key == setting.RegistrationRiskOptionKey {
 		cfg, err := setting.ParseRegistrationRiskConfig(value)
 		if err != nil {
@@ -673,6 +678,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = setting.UpdateRegistrationRiskConfig(value)
 	case setting.RegistrationRiskAPIKeyOptionKey:
 		err = setting.UpdateRegistrationRiskAPIKey(value)
+	case setting.RegistrationRiskIPAPIKeyOptionKey, setting.RegistrationRiskVPNAPIKeyOptionKey:
+		err = setting.UpdateRegistrationRiskProviderKey(key, value)
 	case "RetryTimes":
 		common.RetryTimes, _ = strconv.Atoi(value)
 	case "DataExportInterval":

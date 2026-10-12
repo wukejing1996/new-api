@@ -7100,5 +7100,14 @@
   "USDT network fee notice": "仅支持 TRON（TRC20）网络的 USDT。网络费或提币手续费另计，请确保收款地址实际收到完整显示金额。",
   "Order expires in": "剩余转账时间",
   "Payment not confirmed yet": "付款仍在处理中，完成后账单记录会自动更新。",
-  "USDT payment deadline warning": "請務必在訂單有效期內完成轉帳，並為錢包或交易所處理及鏈上確認預留時間。逾時付款可能導致儲值失敗、資金無法計入您的帳戶。訂單過期後請勿繼續付款。"
+  "USDT payment deadline warning": "請務必在訂單有效期內完成轉帳，並為錢包或交易所處理及鏈上確認預留時間。逾時付款可能導致儲值失敗、資金無法計入您的帳戶。訂單過期後請勿繼續付款。",
+  "Intelligence providers": "情報服務商",
+  "Enable proxycheck.io": "啟用 proxycheck.io",
+  "Enable {{provider}}": "啟用 {{provider}}",
+  "{{provider}} API key": "{{provider}} API 金鑰",
+  "Known abusive IP": "已知濫用 IP",
+  "Privacy relay IP": "隱私中繼 IP",
+  "Residential proxy IP": "住宅代理 IP",
+  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "任意已啟用的服務商命中風險即可限制帳號。只有全部已啟用服務商完成必要檢測，才視為評估完成。",
+  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "已知濫用 IP 由 ipapi.is 檢測，隱私中繼由 VPNAPI.io 檢測，風險評分與臨時信箱由 proxycheck.io 檢測。VPNAPI.io 回傳住宅代理或爬蟲欄位時，也會按規則檢查。"
 }

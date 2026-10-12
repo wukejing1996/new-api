@@ -7100,5 +7100,14 @@
   "USDT network fee notice": "Use USDT on TRON (TRC20) only. Network or withdrawal fees are separate; the full displayed amount must reach this address.",
   "Order expires in": "Transfer before",
   "Payment not confirmed yet": "Payment is still processing. Billing history will update when it completes.",
-  "USDT payment deadline warning": "You must complete the transfer before this order expires. Allow time for wallet or exchange processing and blockchain confirmation. Late payments may fail to credit your account. Do not pay an expired order."
+  "USDT payment deadline warning": "You must complete the transfer before this order expires. Allow time for wallet or exchange processing and blockchain confirmation. Late payments may fail to credit your account. Do not pay an expired order.",
+  "Intelligence providers": "Intelligence providers",
+  "Enable proxycheck.io": "Enable proxycheck.io",
+  "Enable {{provider}}": "Enable {{provider}}",
+  "{{provider}} API key": "{{provider}} API key",
+  "Known abusive IP": "Known abusive IP",
+  "Privacy relay IP": "Privacy relay IP",
+  "Residential proxy IP": "Residential proxy IP",
+  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.",
+  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io."
 }

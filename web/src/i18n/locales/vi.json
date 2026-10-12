@@ -7100,5 +7100,14 @@
   "USDT network fee notice": "Chỉ dùng USDT trên TRON (TRC20). Phí mạng hoặc rút tiền tính riêng; địa chỉ phải nhận đủ số tiền hiển thị.",
   "Order expires in": "Thời gian chuyển còn lại",
   "Payment not confirmed yet": "Thanh toán vẫn đang được xử lý. Lịch sử hóa đơn sẽ cập nhật khi hoàn tất.",
-  "USDT payment deadline warning": "Phải hoàn tất chuyển tiền trước khi đơn hết hạn. Hãy dành thời gian cho ví hoặc sàn xử lý và blockchain xác nhận. Thanh toán muộn có thể không được cộng vào tài khoản. Không thanh toán đơn đã hết hạn."
+  "USDT payment deadline warning": "Phải hoàn tất chuyển tiền trước khi đơn hết hạn. Hãy dành thời gian cho ví hoặc sàn xử lý và blockchain xác nhận. Thanh toán muộn có thể không được cộng vào tài khoản. Không thanh toán đơn đã hết hạn.",
+  "Intelligence providers": "Nhà cung cấp dữ liệu",
+  "Enable proxycheck.io": "Bật proxycheck.io",
+  "Enable {{provider}}": "Bật {{provider}}",
+  "{{provider}} API key": "Khóa API {{provider}}",
+  "Known abusive IP": "IP có hành vi lạm dụng đã biết",
+  "Privacy relay IP": "IP chuyển tiếp bảo mật",
+  "Residential proxy IP": "IP proxy dân cư",
+  "Any enabled provider can flag an account. All enabled providers must complete their required checks before an assessment is considered complete.": "Bất kỳ nhà cung cấp nào được bật cũng có thể phát hiện rủi ro tài khoản. Chỉ coi đánh giá hoàn tất khi tất cả nhà cung cấp được bật hoàn thành các kiểm tra bắt buộc.",
+  "Known abusive IP uses ipapi.is. Privacy relay uses VPNAPI.io. Risk scores and disposable email checks use proxycheck.io. Residential proxy and crawler fields are evaluated when supplied by VPNAPI.io.": "ipapi.is kiểm tra IP lạm dụng; VPNAPI.io kiểm tra chuyển tiếp bảo mật; proxycheck.io cung cấp điểm rủi ro và kiểm tra email dùng một lần. Các trường proxy dân cư và trình thu thập dữ liệu được kiểm tra khi VPNAPI.io trả về."
 }

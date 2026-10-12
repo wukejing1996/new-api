@@ -92,7 +92,17 @@ export function riskOutcomeLabel(
 }
 
 export function riskReasonLabel(value: string, t: TFunction): string {
+  const separator = value.indexOf(':')
+  if (separator > 0) {
+    return `${value.slice(0, separator)}: ${riskReasonLabel(value.slice(separator + 1), t)}`
+  }
   switch (value) {
+    case 'abuser_ip':
+      return t('Known abusive IP')
+    case 'relay_ip':
+      return t('Privacy relay IP')
+    case 'residential_proxy_ip':
+      return t('Residential proxy IP')
     case 'proxy_ip':
       return t('Proxy IP')
     case 'vpn_ip':
@@ -130,6 +140,8 @@ export function riskReasonLabel(value: string, t: TFunction): string {
     case 'scraper_ip_unknown':
     case 'network_type_unknown':
     case 'risk_score_unknown':
+    case 'abuser_ip_unknown':
+    case 'relay_ip_unknown':
       return `${t('Required intelligence field missing')}: ${value}`
     default:
       return value

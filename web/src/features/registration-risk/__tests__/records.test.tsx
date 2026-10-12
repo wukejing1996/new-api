@@ -70,6 +70,11 @@ function entry(source = 'registration'): RiskLog {
       trigger_user_id: source === 'association' ? 9 : 0,
       policy: {
         enabled: true,
+        proxycheck_enabled: true,
+        ipapi_enabled: false,
+        vpnapi_enabled: false,
+        abuser: true,
+        relay: true,
         target_group: 'High Risk',
         proxy: true,
         vpn: true,
@@ -109,6 +114,30 @@ beforeEach(() => {
 })
 
 describe('registration risk history', () => {
+  it('shows the provider and matched reason in stored assessment details', async () => {
+    const user = userEvent.setup()
+    const record = entry()
+    record.details.assessment.providers = [
+      {
+        provider: 'ipapi.is',
+        restricted: true,
+        incomplete: false,
+        reasons: ['abuser_ip'],
+        signals: { abuser: true },
+      },
+    ]
+    record.details.assessment.reasons = ['ipapi.is:abuser_ip']
+    vi.mocked(api.get).mockResolvedValue({
+      data: { success: true, data: { items: [record], total: 1 } },
+    })
+    fixture()
+    expect(await screen.findByText('ipapi.is: Known abusive IP')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Details' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('ipapi.is')).toBeVisible()
+    expect(within(dialog).getByText('Known abusive IP')).toBeVisible()
+  })
+
   it('shows risk signals, processing outcomes and immutable details', async () => {
     const user = userEvent.setup()
     fixture()

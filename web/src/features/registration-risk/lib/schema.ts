@@ -27,6 +27,11 @@ const association = z.object({
 export const registrationRiskSchema = z.object({
   enabled: z.boolean(),
   target_group: z.string().trim().max(64),
+  proxycheck_enabled: z.boolean(),
+  ipapi_enabled: z.boolean(),
+  vpnapi_enabled: z.boolean(),
+  abuser: z.boolean(),
+  relay: z.boolean(),
   proxy: z.boolean(),
   vpn: z.boolean(),
   tor: z.boolean(),
@@ -46,7 +51,11 @@ export const registrationRiskSchema = z.object({
 
 export function createRegistrationRiskFormSchema(t: (key: string) => string) {
   return registrationRiskSchema
-    .extend({ api_key: z.string().max(256) })
+    .extend({
+      api_key: z.string().max(256),
+      ipapi_key: z.string().max(256),
+      vpnapi_key: z.string().max(256),
+    })
     .superRefine((value, ctx) => {
       if (value.enabled && !value.target_group) {
         ctx.addIssue({
@@ -61,10 +70,14 @@ export function createRegistrationRiskFormSchema(t: (key: string) => string) {
 export type RegistrationRiskConfig = z.infer<typeof registrationRiskSchema>
 export type RegistrationRiskFormValues = RegistrationRiskConfig & {
   api_key: string
+  ipapi_key: string
+  vpnapi_key: string
 }
 export type RegistrationRiskSettings = {
   config: RegistrationRiskConfig
   api_key_configured: boolean
+  ipapi_key_configured?: boolean
+  vpnapi_key_configured?: boolean
   redis_enabled: boolean
   target_limit_enabled: boolean
   target_max_requests: number
@@ -78,4 +91,14 @@ export type RiskAssessment = {
     detections: Record<string, boolean | number | null>
   }
   disposable?: boolean
+  providers?: {
+    provider: string
+    restricted: boolean
+    incomplete: boolean
+    reasons: string[]
+    signals?: Record<string, boolean | null>
+    risk?: number
+    network_type?: string
+    error?: string
+  }[]
 }
