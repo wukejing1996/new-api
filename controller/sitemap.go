@@ -28,6 +28,7 @@ var sitemapStaticPaths = []string{
 	"/docs",
 	"/docs/how-to-use",
 	"/about",
+	"/enterprise",
 	"/blog",
 }
 
@@ -49,33 +50,7 @@ func GetSitemap(c *gin.Context) {
 		return
 	}
 
-	now := time.Now().UTC().Format(sitemapDateFormat)
-	baseURL := publicSiteBaseURL(c)
-	urls := make([]sitemapURL, 0, len(sitemapLocaleSlugs)*len(sitemapStaticPaths)+len(posts))
-
-	for _, locale := range []string{"en-US", "fr-FR", "ja-JP", "ko-KR", "ru-RU", "vi-VN"} {
-		slug := sitemapLocaleSlugs[locale]
-		for _, path := range sitemapStaticPaths {
-			urls = append(urls, sitemapURL{
-				Loc:     baseURL + "/" + slug + path,
-				LastMod: now,
-			})
-		}
-	}
-
-	for _, post := range posts {
-		if post.Slug == "" {
-			continue
-		}
-		url := sitemapURL{
-			Loc: baseURL + "/blog/" + post.Slug,
-		}
-		if post.UpdatedAt > 0 {
-			url.LastMod = time.Unix(post.UpdatedAt, 0).UTC().Format(sitemapDateFormat)
-		}
-		urls = append(urls, url)
-	}
-
+	urls := buildSitemapURLs(publicSiteBaseURL(c), posts)
 	payload, err := xml.MarshalIndent(sitemapURLSet{
 		Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
 		URLs:  urls,
@@ -87,6 +62,34 @@ func GetSitemap(c *gin.Context) {
 
 	c.Header("Cache-Control", "no-store")
 	c.Data(http.StatusOK, "application/xml; charset=utf-8", append([]byte(xml.Header), payload...))
+}
+
+func buildSitemapURLs(baseURL string, posts []model.BlogPostListItem) []sitemapURL {
+	urls := make([]sitemapURL, 0, len(sitemapLocaleSlugs)*len(sitemapStaticPaths)+len(posts))
+
+	for _, locale := range []string{"en-US", "fr-FR", "ja-JP", "ko-KR", "ru-RU", "vi-VN"} {
+		slug := sitemapLocaleSlugs[locale]
+		for _, path := range sitemapStaticPaths {
+			urls = append(urls, sitemapURL{
+				Loc: baseURL + "/" + slug + path,
+			})
+		}
+	}
+
+	for _, post := range posts {
+		if post.Slug == "" {
+			continue
+		}
+		url := sitemapURL{
+			Loc: baseURL + "/en/blog/" + post.Slug,
+		}
+		if post.UpdatedAt > 0 {
+			url.LastMod = time.Unix(post.UpdatedAt, 0).UTC().Format(sitemapDateFormat)
+		}
+		urls = append(urls, url)
+	}
+
+	return urls
 }
 
 func publicSiteBaseURL(c *gin.Context) string {
@@ -114,6 +117,9 @@ func publicSiteBaseURL(c *gin.Context) string {
 	}
 	if host == "" {
 		host = "costrouter.ai"
+	}
+	if strings.EqualFold(host, "costrouter.ai") || strings.EqualFold(host, "www.costrouter.ai") {
+		return "https://costrouter.ai"
 	}
 
 	return proto + "://" + strings.TrimRight(host, "/")
