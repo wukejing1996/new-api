@@ -27,7 +27,9 @@ import { cn } from '@/lib/utils'
 
 import { getLogStats, getUserLogStats } from '../api'
 import { DEFAULT_LOG_STATS } from '../constants'
+import { useLogStatsRefresh } from '../hooks/use-log-stats-refresh'
 import { buildApiParams } from '../lib/utils'
+import { LogStatsRefreshControls } from './log-stats-refresh-controls'
 import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -53,8 +55,9 @@ export function CommonLogsStats() {
   const { isAdminView: isAdmin } = useLogsViewScope()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
+  const refresh = useLogStatsRefresh(isAdmin)
 
-  const { data: stats, isLoading } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, searchParams],
     queryFn: async () => {
       const params = buildApiParams({
@@ -74,7 +77,11 @@ export function CommonLogsStats() {
         : DEFAULT_LOG_STATS
     },
     placeholderData: (previousData) => previousData,
+    refetchInterval: refresh.refetchInterval,
+    refetchIntervalInBackground: refresh.refetchIntervalInBackground,
   })
+  const { data: stats, isLoading } = statsQuery
+  const usageValue = stats ? formatLogQuota(stats.quota || 0) : '—'
 
   if (isLoading) {
     return (
@@ -90,19 +97,29 @@ export function CommonLogsStats() {
     <div className='flex flex-wrap items-center gap-2'>
       <StatBadge
         label={t('Usage')}
-        value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
+        value={sensitiveVisible ? usageValue : '••••'}
         accent='bg-sky-500/70'
       />
       <StatBadge
         label={t('RPM')}
-        value={stats?.rpm || 0}
+        value={stats?.rpm ?? '—'}
         accent='bg-rose-500/65'
       />
       <StatBadge
         label={t('TPM')}
-        value={stats?.tpm || 0}
+        value={stats?.tpm ?? '—'}
         accent='bg-slate-400/70'
       />
+      {isAdmin && (
+        <LogStatsRefreshControls
+          refreshInterval={refresh.refreshInterval}
+          onIntervalChange={refresh.setRefreshInterval}
+          onRefresh={() => void statsQuery.refetch({ cancelRefetch: false })}
+          isFetching={statsQuery.isFetching}
+          isError={statsQuery.isError}
+          dataUpdatedAt={statsQuery.dataUpdatedAt}
+        />
+      )}
     </div>
   )
 }

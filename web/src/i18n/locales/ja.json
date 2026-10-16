@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "統計を更新",
+    "Auto refresh: off": "自動更新：オフ",
+    "Every {{seconds}} seconds": "{{seconds}}秒ごと",
     "Registration risk records": "登録リスク記録",
     "Registration risk assessment details": "登録リスク評価の詳細",
     "Risk assessment": "リスク評価",

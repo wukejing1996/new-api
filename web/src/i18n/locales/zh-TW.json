@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "重新整理統計",
+    "Auto refresh: off": "自動重新整理：關閉",
+    "Every {{seconds}} seconds": "每 {{seconds}} 秒",
     "Registration risk records": "註冊風險記錄",
     "Registration risk assessment details": "註冊風險評估詳情",
     "Risk assessment": "風險評估",

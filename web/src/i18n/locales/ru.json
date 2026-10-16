@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "Обновить статистику",
+    "Auto refresh: off": "Автообновление: выкл.",
+    "Every {{seconds}} seconds": "Каждые {{seconds}} секунд",
     "Registration risk records": "Журнал рисков регистрации",
     "Registration risk assessment details": "Подробности оценки риска регистрации",
     "Risk assessment": "Оценка риска",

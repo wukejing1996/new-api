@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "Refresh statistics",
+    "Auto refresh: off": "Auto refresh: off",
+    "Every {{seconds}} seconds": "Every {{seconds}} seconds",
     "Registration risk records": "Registration risk records",
     "Registration risk assessment details": "Registration risk assessment details",
     "Risk assessment": "Risk assessment",

@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "Làm mới thống kê",
+    "Auto refresh: off": "Tự động làm mới: tắt",
+    "Every {{seconds}} seconds": "Mỗi {{seconds}} giây",
     "Registration risk records": "Lịch sử rủi ro đăng ký",
     "Registration risk assessment details": "Chi tiết đánh giá rủi ro đăng ký",
     "Risk assessment": "Đánh giá rủi ro",

@@ -1,5 +1,8 @@
 {
   "translation": {
+    "Refresh statistics": "Actualiser les statistiques",
+    "Auto refresh: off": "Actualisation auto : désactivée",
+    "Every {{seconds}} seconds": "Toutes les {{seconds}} secondes",
     "Registration risk records": "Historique des risques à l’inscription",
     "Registration risk assessment details": "Détails de l’évaluation du risque",
     "Risk assessment": "Évaluation du risque",
