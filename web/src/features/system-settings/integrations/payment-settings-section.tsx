@@ -178,6 +178,9 @@ const paymentSchema = z.object({
   WaffoPancakePrivateKey: z.string(),
   WaffoPancakeReturnURL: z.string(),
   UsdtEnabled: z.boolean(),
+  UsdtBscEnabled: z.boolean(),
+  UsdtBscReceiveAddress: z.string(),
+  UsdtBscRpcURL: z.string(),
   UsdtMinTopUp: z.coerce.number().int().min(1).max(10000),
   UsdtReceiveAddress: z.string(),
   UsdtTrongridApiKey: z.string(),
@@ -191,6 +194,9 @@ type WaffoFormFieldValues = Omit<WaffoSettingsValues, 'WaffoPayMethods'>
 type WaffoPancakeFormFieldValues = WaffoPancakeSettingsValues
 type UsdtFormFieldValues = {
   UsdtEnabled: boolean
+  UsdtBscEnabled: boolean
+  UsdtBscReceiveAddress: string
+  UsdtBscRpcURL: string
   UsdtMinTopUp: number
   UsdtReceiveAddress: string
   UsdtTrongridApiKey: string
@@ -532,16 +538,19 @@ export function PaymentSettingsSection({
     // Save connection details first, then enable new checkouts.
     for (const key of [
       'UsdtReceiveAddress',
+      'UsdtBscReceiveAddress',
+      'UsdtBscRpcURL',
       'UsdtMinTopUp',
       'UsdtNetwork',
       'UsdtCheckInterval',
       'UsdtOrderExpireTime',
       'UsdtTrongridApiKey',
       'UsdtEnabled',
+      'UsdtBscEnabled',
     ] as const) {
       const raw = values[key]
       const value = typeof raw === 'string' ? raw.trim() : raw
-      if (key === 'UsdtTrongridApiKey' && !value) continue
+      if ((key === 'UsdtTrongridApiKey' || key === 'UsdtBscRpcURL') && !value) continue
       if (value !== initialRef.current[key]) updates.push({ key, value })
     }
 
@@ -1671,7 +1680,9 @@ export function PaymentSettingsSection({
                 <div>
                   <h3 className='text-lg font-medium'>{t('USDT Payment')}</h3>
                   <p className='text-muted-foreground text-sm'>
-                    {t('Configure USDT (TRC20) cryptocurrency payment via Tron blockchain')}
+                    {t(
+                      'Configure TRC20 and BSC payments independently. Minimum amount and timing apply to both networks.'
+                    )}
                   </p>
                 </div>
 
@@ -1681,7 +1692,7 @@ export function PaymentSettingsSection({
                   render={({ field }) => (
                     <SettingsSwitchItem>
                       <SettingsSwitchContent>
-                        <FormLabel>{t('Enable USDT')}</FormLabel>
+                        <FormLabel>{t('Enable USDT')} (TRC20)</FormLabel>
                         <FormDescription>
                           {t('Enable USDT cryptocurrency payment')}
                         </FormDescription>
@@ -1696,7 +1707,58 @@ export function PaymentSettingsSection({
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name='UsdtBscEnabled'
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <SettingsSwitchContent>
+                        <FormLabel>{t('Enable BSC (BEP20) USDT')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Save a BSC address and lookup URL before enabling. The connection is checked when enabled.'
+                          )}
+                        </FormDescription>
+                      </SettingsSwitchContent>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </SettingsSwitchItem>
+                  )}
+                />
                 <div className='grid gap-6 md:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='UsdtBscReceiveAddress'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('BSC receive address')}</FormLabel>
+                        <FormControl><Input placeholder='0x…' {...field} /></FormControl>
+                        <FormDescription>
+                          {t('Use your BSC mainnet address. Never enter a private key or recovery phrase.')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='UsdtBscRpcURL'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('BSC payment lookup URL')}</FormLabel>
+                        <FormControl>
+                          <Input type='password' autoComplete='new-password' placeholder='https://…' {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          {t(
+                            'HTTPS RPC for BSC mainnet (56), with historical logs, receipts and finalized blocks. Include the provider key in the URL; leave blank to keep the saved URL.'
+                          )}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name='UsdtReceiveAddress'

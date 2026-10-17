@@ -255,11 +255,11 @@ export type UsdtOrder = {
   expire_time: number
 }
 
-export async function requestUsdtPayment(amount: number): Promise<UsdtOrder> {
+export async function requestUsdtPayment(amount: number, network = 'TRC20'): Promise<UsdtOrder> {
   const { data } = await api.post<{
     message: string
     data: UsdtOrder | string
-  }>('/api/user/usdt/request', { amount })
+  }>('/api/user/usdt/request', { amount, network })
   if (data.message !== 'success' || typeof data.data === 'string')
     {throw new Error(
       typeof data.data === 'string'

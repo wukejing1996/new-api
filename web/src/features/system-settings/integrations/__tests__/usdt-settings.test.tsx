@@ -55,6 +55,9 @@ const defaults: ComponentProps<typeof PaymentSettingsSection> = {
   },
   usdtDefaultValues: {
     UsdtEnabled: false,
+    UsdtBscEnabled: false,
+    UsdtBscReceiveAddress: '',
+    UsdtBscRpcURL: '',
     UsdtMinTopUp: 10,
     UsdtReceiveAddress: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
     UsdtTrongridApiKey: '',
@@ -86,6 +89,25 @@ function Fixture() {
 }
 
 describe('USDT settings', () => {
+  it('saves the BSC address and lookup URL before enabling BSC without changing TRC20', async () => {
+    const updates: Array<{ key: string; value: unknown }> = []
+    vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {
+      updates.push(body as { key: string; value: unknown })
+      return { data: { success: true } }
+    })
+    render(<Fixture />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: 'USDT' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'BSC receive address' }), { target: { value: '0x3932af6fdbc450446bdb4eb4d2d13335c42a0417' } })
+    fireEvent.change(screen.getByLabelText('BSC payment lookup URL'), { target: { value: 'https://example.com/test-key' } })
+    await user.click(screen.getByRole('switch', { name: 'Enable BSC (BEP20) USDT' }))
+    await user.click(screen.getByRole('button', { name: 'Save all settings' }))
+    await waitFor(() => expect(updates).toContainEqual({ key: 'UsdtBscEnabled', value: true }))
+    expect(updates.findIndex(v => v.key === 'UsdtBscReceiveAddress')).toBeLessThan(updates.findIndex(v => v.key === 'UsdtBscEnabled'))
+    expect(updates.findIndex(v => v.key === 'UsdtBscRpcURL')).toBeLessThan(updates.findIndex(v => v.key === 'UsdtBscEnabled'))
+    expect(updates.some(v => v.key === 'UsdtEnabled')).toBe(false)
+    expect(updates.some(v => v.key === 'UsdtTrongridApiKey')).toBe(false)
+  })
   it('saves the enable toggle and edited values without clearing a stored API key', async () => {
     const put = vi
       .spyOn(api, 'put')
@@ -93,7 +115,7 @@ describe('USDT settings', () => {
     render(<Fixture />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('tab', { name: 'USDT' }))
-    await user.click(screen.getByRole('switch', { name: 'Enable USDT' }))
+    await user.click(screen.getByRole('switch', { name: 'Enable USDT (TRC20)' }))
     fireEvent.change(
       screen.getByRole('spinbutton', { name: 'Minimum Top-up' }),
       { target: { value: '25' } }

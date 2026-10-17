@@ -272,6 +272,9 @@ export type ModelSettings = {
 
 export type BillingSettings = {
   UsdtEnabled: boolean
+  UsdtBscEnabled: boolean
+  UsdtBscReceiveAddress: string
+  UsdtBscRpcURL: string
   UsdtMinTopUp: number
   UsdtReceiveAddress: string
   UsdtTrongridApiKey: string

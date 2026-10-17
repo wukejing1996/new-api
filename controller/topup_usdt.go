@@ -16,7 +16,8 @@ import (
 )
 
 type UsdtPayRequest struct {
-	Amount int64 `json:"amount"`
+	Amount  int64  `json:"amount"`
+	Network string `json:"network"`
 }
 type UsdtCheckRequest struct {
 	TradeNo string `json:"trade_no"`
@@ -28,15 +29,28 @@ func isUsdtTopUpEnabled() bool {
 
 func RequestUsdtPay(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
-	config := setting.GetUsdtConfig()
-	if !operation_setting.IsPaymentComplianceConfirmed() || !config.Enabled || !setting.ValidTronAddress(config.Address) || config.Network != "TRC20" {
+	var req UsdtPayRequest
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid USDT request"})
+		return
+	}
+	config := setting.GetUsdtNetworkConfig(req.Network)
+	if !operation_setting.IsPaymentComplianceConfirmed() || !config.Available() {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "USDT payment is unavailable"})
 		return
 	}
-	var req UsdtPayRequest
-	if c.ShouldBindJSON(&req) != nil || req.Amount < int64(max(1, config.MinTopUp)) || req.Amount > 10000 {
+	if req.Amount < int64(max(1, config.MinTopUp)) || req.Amount > 10000 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid USDT top-up amount"})
 		return
+	}
+	var startBlock int64
+	if config.Network == "BSC" {
+		var err error
+		startBlock, err = service.ValidateBscProvider(c.Request.Context(), config.RPCURL)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "BSC payment lookup is unavailable; please try again later"})
+			return
+		}
 	}
 	// USDT purchases USD wallet units, independently of display currency and fiat pricing.
 	quota, err := common.WalletQuotaFromDecimalStrict(decimal.NewFromInt(req.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
@@ -50,6 +64,7 @@ func RequestUsdtPay(c *gin.Context) {
 	now := time.Now().Unix()
 	order, err := model.CreateUsdtOrder(&model.TopUp{
 		UserId: c.GetInt("id"), Amount: req.Amount, UsdtQuota: quota, UsdtAddress: config.Address,
+		UsdtNetwork: config.Network, UsdtStartBlock: startBlock,
 		TradeNo:       fmt.Sprintf("USDT%d%s", c.GetInt("id"), common.GetRandomString(24)),
 		PaymentMethod: model.PaymentMethodUsdt, PaymentProvider: model.PaymentProviderUsdt,
 		CreateTime: now, ExpireTime: now + int64(max(300, min(86400, config.OrderExpireTime))), Status: common.TopUpStatusPending,
@@ -62,7 +77,7 @@ func RequestUsdtPay(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{
 		"trade_no": order.TradeNo, "address": order.UsdtAddress, "amount": order.Money,
 		"credited_amount": order.Money,
-		"network":         "TRC20", "expire_time": order.ExpireTime,
+		"network":         config.Network, "expire_time": order.ExpireTime,
 	}})
 }
 

@@ -2,8 +2,10 @@ package setting
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -11,30 +13,72 @@ import (
 )
 
 var (
-	UsdtEnabled         = false
-	UsdtMinTopUp        = 10
-	UsdtReceiveAddress  = ""
-	UsdtTrongridApiKey  = ""
-	UsdtNetwork         = "TRC20" // 默认使用TRC20网络
-	UsdtCheckInterval   = 30      // 检查支付状态的间隔（秒）
-	UsdtOrderExpireTime = 1800    // 订单过期时间（秒），默认30分钟
+	UsdtEnabled           = false
+	UsdtMinTopUp          = 10
+	UsdtReceiveAddress    = ""
+	UsdtTrongridApiKey    = ""
+	UsdtNetwork           = "TRC20" // 默认使用TRC20网络
+	UsdtCheckInterval     = 30      // 检查支付状态的间隔（秒）
+	UsdtOrderExpireTime   = 1800    // 订单过期时间（秒），默认30分钟
+	UsdtBscEnabled        = false
+	UsdtBscReceiveAddress = ""
+	UsdtBscRpcURL         = ""
 )
+
+const BscUsdtContract = "0x55d398326f99059ff775485246999027b3197955"
+const TronUsdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
 func IsUsdtTopUpEnabled() bool {
 	c := GetUsdtConfig()
-	return c.Enabled && ValidTronAddress(c.Address) && c.Network == "TRC20"
+	return c.Available() || GetUsdtNetworkConfig("BSC").Available()
 }
 
 type UsdtConfig struct {
 	Enabled                                  bool
 	Address, APIKey, Network                 string
 	MinTopUp, CheckInterval, OrderExpireTime int
+	RPCURL                                   string
+}
+
+func (c UsdtConfig) Available() bool {
+	if c.Network == "BSC" {
+		return c.Enabled && ValidBscAddress(c.Address) && ValidBscRPCURL(c.RPCURL)
+	}
+	return c.Enabled && c.Network == "TRC20" && ValidTronAddress(c.Address)
+}
+
+func ValidBscAddress(address string) bool {
+	if len(address) != 42 || !strings.HasPrefix(address, "0x") {
+		return false
+	}
+	b, err := hex.DecodeString(address[2:])
+	return err == nil && new(big.Int).SetBytes(b).Sign() > 0
+}
+
+func ValidBscRPCURL(value string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Fragment == "" && len(value) <= 2048
+}
+
+func GetUsdtNetworkConfig(network string) UsdtConfig {
+	c := GetUsdtConfig()
+	if network == "" || network == "TRC20" {
+		return c
+	}
+	if network != "BSC" {
+		return UsdtConfig{}
+	}
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	c.Enabled, c.Address, c.Network, c.RPCURL = UsdtBscEnabled, strings.ToLower(UsdtBscReceiveAddress), "BSC", UsdtBscRpcURL
+	c.APIKey = ""
+	return c
 }
 
 func GetUsdtConfig() UsdtConfig {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
-	return UsdtConfig{UsdtEnabled, UsdtReceiveAddress, UsdtTrongridApiKey, UsdtNetwork, UsdtMinTopUp, UsdtCheckInterval, UsdtOrderExpireTime}
+	return UsdtConfig{Enabled: UsdtEnabled, Address: UsdtReceiveAddress, APIKey: UsdtTrongridApiKey, Network: UsdtNetwork, MinTopUp: UsdtMinTopUp, CheckInterval: UsdtCheckInterval, OrderExpireTime: UsdtOrderExpireTime}
 }
 
 func ValidTronAddress(address string) bool {
@@ -60,6 +104,22 @@ func ValidTronAddress(address string) bool {
 
 func ValidateUsdtOption(key, value string) error {
 	switch key {
+	case "UsdtBscEnabled":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("invalid BSC enabled value")
+		}
+		c := GetUsdtNetworkConfig("BSC")
+		if value == "true" && (!ValidBscAddress(c.Address) || !ValidBscRPCURL(c.RPCURL)) {
+			return fmt.Errorf("configure a BSC receive address and HTTPS RPC URL before enabling BSC")
+		}
+	case "UsdtBscReceiveAddress":
+		if value != "" && !ValidBscAddress(value) {
+			return fmt.Errorf("invalid BSC receive address")
+		}
+	case "UsdtBscRpcURL":
+		if value != "" && !ValidBscRPCURL(value) {
+			return fmt.Errorf("invalid BSC HTTPS RPC URL")
+		}
 	case "UsdtEnabled":
 		if value != "true" && value != "false" {
 			return fmt.Errorf("invalid USDT enabled value")

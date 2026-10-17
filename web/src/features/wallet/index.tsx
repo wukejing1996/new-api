@@ -66,6 +66,7 @@ export function Wallet(props: WalletProps) {
   const { t } = useTranslation()
   const [user, setUser] = useState<UserWalletData | null>(null)
   const [usdtOrder, setUsdtOrder] = useState<UsdtOrder | null>(null)
+  const [usdtNetwork, setUsdtNetwork] = useState('TRC20')
   const [userLoading, setUserLoading] = useState(true)
   const [topupAmount, setTopupAmount] = useState(0)
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
@@ -182,7 +183,10 @@ export function Wallet(props: WalletProps) {
     try {
       // Validate minimum topup
       if (method.type === 'usdt') {
-        setUsdtOrder(await requestUsdtPayment(topupAmount))
+        const networks = topupInfo?.usdt_networks ?? ['TRC20']
+        const network = networks.includes(usdtNetwork) ? usdtNetwork : networks[0]
+        if (!network) return
+        setUsdtOrder(await requestUsdtPayment(topupAmount, network))
         return
       }
       const minTopup = getMinTopupAmount(topupInfo)
@@ -309,6 +313,8 @@ export function Wallet(props: WalletProps) {
             >
               <div id='wallet-add-funds' className='scroll-mt-4'>
                 <RechargeFormCard
+                  usdtNetwork={usdtNetwork}
+                  onUsdtNetworkChange={setUsdtNetwork}
                   topupInfo={topupInfo}
                   presetAmounts={presetAmounts}
                   selectedPreset={selectedPreset}

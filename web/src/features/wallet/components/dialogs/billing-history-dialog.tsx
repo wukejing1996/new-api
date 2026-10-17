@@ -239,7 +239,7 @@ export function BillingHistoryDialog({
                                       amount: record.money,
                                       credited_amount: record.money,
                                       expire_time: record.expire_time ?? 0,
-                                      network: 'TRC20',
+                                      network: record.usdt_network || 'TRC20',
                                     })
                                   }
                                 >
@@ -267,6 +267,8 @@ export function BillingHistoryDialog({
                           </Label>
                           <div className='text-sm font-medium'>
                             {getPaymentMethodName(record.payment_method, t)}
+                            {record.payment_method === 'usdt' &&
+                              ` · ${record.usdt_network || 'TRC20'}`}
                           </div>
                         </div>
                         <div className='space-y-1'>

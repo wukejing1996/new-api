@@ -54,6 +54,8 @@ import type {
 import { CreemProductsSection } from './creem-products-section'
 
 interface RechargeFormCardProps {
+  usdtNetwork?: string
+  onUsdtNetworkChange?: (network: string) => void
   topupInfo: TopupInfo | null
   presetAmounts: PresetAmount[]
   selectedPreset: number | null
@@ -111,6 +113,8 @@ export function RechargeFormCard({
   waffoMinTopup,
   onWaffoMethodSelect,
   enableWaffoPancakeTopup,
+  usdtNetwork = 'TRC20',
+  onUsdtNetworkChange,
 }: RechargeFormCardProps) {
   const { t } = useTranslation()
   const [localAmount, setLocalAmount] = useState(topupAmount.toString())
@@ -143,6 +147,8 @@ export function RechargeFormCard({
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
+  const usdtNetworks = topupInfo?.usdt_networks ?? ['TRC20']
+  const currentUsdtNetwork = usdtNetworks.includes(usdtNetwork) ? usdtNetwork : usdtNetworks[0]
 
   if (loading) {
     return (
@@ -217,6 +223,18 @@ export function RechargeFormCard({
       }
       contentClassName='space-y-4 sm:space-y-6'
     >
+      {topupInfo?.enable_usdt_topup && onUsdtNetworkChange && (
+        <fieldset disabled={!!paymentLoading} className='space-y-2'>
+          <legend className='text-sm font-medium'>USDT · {t('Network')}</legend>
+          <div className='flex flex-wrap gap-2'>
+            {usdtNetworks.map((network) => (
+              <Button key={network} type='button' variant={network === currentUsdtNetwork ? 'default' : 'outline'} aria-pressed={network === currentUsdtNetwork} onClick={() => onUsdtNetworkChange(network)}>
+                {network === 'BSC' ? 'BSC (BEP20)' : 'TRON (TRC20)'}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {/* Online Topup Section */}
       {hasAnyTopup ? (
         <div className='space-y-4 sm:space-y-6'>

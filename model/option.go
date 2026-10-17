@@ -100,6 +100,9 @@ func InitOptionMap() {
 	common.OptionMap["StripeUnitPrice"] = strconv.FormatFloat(setting.StripeUnitPrice, 'f', -1, 64)
 	common.OptionMap["StripePromotionCodesEnabled"] = strconv.FormatBool(setting.StripePromotionCodesEnabled)
 	common.OptionMap["UsdtEnabled"] = strconv.FormatBool(setting.UsdtEnabled)
+	common.OptionMap["UsdtBscEnabled"] = strconv.FormatBool(setting.UsdtBscEnabled)
+	common.OptionMap["UsdtBscReceiveAddress"] = setting.UsdtBscReceiveAddress
+	common.OptionMap["UsdtBscRpcURL"] = setting.UsdtBscRpcURL
 	common.OptionMap["UsdtMinTopUp"] = strconv.Itoa(setting.UsdtMinTopUp)
 	common.OptionMap["UsdtReceiveAddress"] = setting.UsdtReceiveAddress
 	common.OptionMap["UsdtTrongridApiKey"] = setting.UsdtTrongridApiKey
@@ -556,6 +559,12 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.StripePromotionCodesEnabled = value == "true"
 	case "UsdtEnabled":
 		setting.UsdtEnabled = value == "true"
+	case "UsdtBscEnabled":
+		setting.UsdtBscEnabled = value == "true"
+	case "UsdtBscReceiveAddress":
+		setting.UsdtBscReceiveAddress = strings.ToLower(value)
+	case "UsdtBscRpcURL":
+		setting.UsdtBscRpcURL = value
 	case "UsdtMinTopUp":
 		setting.UsdtMinTopUp, _ = strconv.Atoi(value)
 	case "UsdtReceiveAddress":

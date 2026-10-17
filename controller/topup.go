@@ -99,6 +99,14 @@ func GetTopUpInfo(c *gin.Context) {
 	// 如果启用了 USDT 支付，添加到支付方法列表
 	enableUsdt := isUsdtTopUpEnabled()
 	usdtConfig := setting.GetUsdtConfig()
+	usdtNetworks := []string{}
+	if enableUsdt {
+		for _, network := range []string{"TRC20", "BSC"} {
+			if setting.GetUsdtNetworkConfig(network).Available() {
+				usdtNetworks = append(usdtNetworks, network)
+			}
+		}
+	}
 	if enableUsdt {
 		hasUsdt := false
 		for _, method := range payMethods {
@@ -126,6 +134,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"enable_waffo_topup":               enableWaffo,
 		"enable_waffo_pancake_topup":       enableWaffoPancake,
 		"enable_usdt_topup":                enableUsdt,
+		"usdt_networks":                    usdtNetworks,
 		"enable_redemption":                complianceConfirmed,
 		"payment_compliance_confirmed":     complianceConfirmed,
 		"payment_compliance_terms_version": operation_setting.CurrentComplianceTermsVersion,

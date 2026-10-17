@@ -92,6 +92,7 @@ func GetOptions(c *gin.Context) {
 		}
 		value := common.Interface2String(v)
 		isSensitiveKey := strings.HasSuffix(k, "Token") ||
+			k == "UsdtBscRpcURL" ||
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
@@ -498,6 +499,16 @@ func UpdateOption(c *gin.Context) {
 		recordPasskeyDomainAudit(c, change, false, nil)
 		common.ApiSuccess(c, change)
 		return
+	}
+	if (option.Key == "UsdtBscEnabled" && option.Value.(string) == "true") || (option.Key == "UsdtBscRpcURL" && option.Value.(string) != "") {
+		endpoint := setting.GetUsdtNetworkConfig("BSC").RPCURL
+		if option.Key == "UsdtBscRpcURL" {
+			endpoint = option.Value.(string)
+		}
+		if _, checkErr := service.ValidateBscProvider(c.Request.Context(), endpoint); checkErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": checkErr.Error()})
+			return
+		}
 	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {

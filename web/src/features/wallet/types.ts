@@ -121,6 +121,7 @@ export interface WaffoPayMethod {
  */
 export interface TopupInfo {
   enable_usdt_topup?: boolean
+  usdt_networks?: string[]
   usdt_min_topup?: number
   /** Whether online topup is enabled */
   enable_online_topup: boolean
@@ -256,6 +257,7 @@ export type TopupStatus = 'success' | 'pending' | 'expired'
  */
 export interface TopupRecord {
   usdt_address?: string
+  usdt_network?: string
   expire_time?: number
   /** Record ID */
   id: number

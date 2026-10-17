@@ -2,15 +2,19 @@ package model
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
 	"math"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -31,11 +35,18 @@ type TopUp struct {
 	TxHash          string  `json:"tx_hash" gorm:"type:varchar(255);index;default:''"`
 	ExpireTime      int64   `json:"expire_time" gorm:"default:0"`
 	// Nullable unique keys leave other providers and legacy orders untouched.
-	UsdtAmountKey *string `json:"-" gorm:"type:varchar(100);uniqueIndex"`
-	UsdtTxHash    *string `json:"-" gorm:"type:varchar(64);uniqueIndex"`
-	UsdtAddress   string  `json:"usdt_address,omitempty" gorm:"type:varchar(34)"`
-	UsdtQuota     int     `json:"-"`
-	UsdtStartTime int64   `json:"-"`
+	UsdtAmountKey    *string `json:"-" gorm:"type:varchar(100);uniqueIndex"`
+	UsdtTxHash       *string `json:"-" gorm:"type:varchar(64);uniqueIndex"`
+	UsdtAddress      string  `json:"usdt_address,omitempty" gorm:"type:varchar(42)"`
+	UsdtQuota        int     `json:"-"`
+	UsdtStartTime    int64   `json:"-"`
+	UsdtNetwork      string  `json:"usdt_network,omitempty" gorm:"type:varchar(8)"`
+	UsdtContract     string  `json:"-" gorm:"type:varchar(42)"`
+	UsdtDecimals     int     `json:"-"`
+	UsdtStartBlock   int64   `json:"-"`
+	UsdtScanBlock    int64   `json:"-"`
+	UsdtScanComplete bool    `json:"-"`
+	UsdtEventKey     *string `json:"-" gorm:"type:varchar(100);uniqueIndex"`
 }
 
 const (
@@ -880,8 +891,23 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 	if order.Amount <= 0 || order.Amount > 10000 {
 		return nil, ErrInvalidTopUpQuota
 	}
+	if order.UsdtNetwork == "" {
+		order.UsdtNetwork = "TRC20"
+	}
+	if order.UsdtNetwork == "BSC" {
+		if !setting.ValidBscAddress(order.UsdtAddress) || order.UsdtStartBlock <= 0 {
+			return nil, errors.New("invalid BSC order snapshot")
+		}
+		order.UsdtAddress = strings.ToLower(order.UsdtAddress)
+		order.UsdtContract, order.UsdtDecimals = setting.BscUsdtContract, 18
+		order.UsdtScanBlock = order.UsdtStartBlock
+	} else if order.UsdtNetwork == "TRC20" {
+		order.UsdtContract, order.UsdtDecimals = setting.TronUsdtContract, 6
+	} else {
+		return nil, errors.New("unsupported USDT network")
+	}
 	// Release elapsed reservations even if the monitor has not reached them yet.
-	if err := DB.Model(&TopUp{}).Where("payment_provider = ? AND status = ? AND expire_time <= ? AND usdt_amount_key IS NOT NULL", PaymentProviderUsdt, common.TopUpStatusPending, time.Now().Unix()).Updates(map[string]any{"status": "expired", "usdt_amount_key": nil}).Error; err != nil {
+	if err := ExpireElapsedUsdtOrders(time.Now().Unix()); err != nil {
 		return nil, err
 	}
 	start, err := rand.Int(rand.Reader, big.NewInt(500))
@@ -891,13 +917,23 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 	for attempt := range 500 {
 		micros := order.Amount*1000000 + ((start.Int64()+int64(attempt))%500+1)*1000
 		key := fmt.Sprintf("%s:%d", order.UsdtAddress, micros)
+		if order.UsdtNetwork == "BSC" {
+			digest := sha256.Sum256([]byte(fmt.Sprintf("56:%s:%s:%d", order.UsdtContract, order.UsdtAddress, micros)))
+			key = fmt.Sprintf("bsc:%x", digest)
+		}
 		err := DB.Transaction(func(tx *gorm.DB) error {
 			var user User
 			if err := lockForUpdate(tx).Select("id", "quota").First(&user, order.UserId).Error; err != nil {
 				return err
 			}
 			var pending TopUp
-			err := tx.Where("user_id = ? AND amount = ? AND payment_provider = ? AND status = ? AND expire_time > ? AND usdt_amount_key IS NOT NULL", order.UserId, order.Amount, PaymentProviderUsdt, common.TopUpStatusPending, time.Now().Unix()).First(&pending).Error
+			pendingQuery := tx.Where("user_id = ? AND amount = ? AND payment_provider = ? AND status = ? AND expire_time > ? AND usdt_amount_key IS NOT NULL", order.UserId, order.Amount, PaymentProviderUsdt, common.TopUpStatusPending, time.Now().Unix())
+			if order.UsdtNetwork == "TRC20" {
+				pendingQuery = pendingQuery.Where("usdt_network = ? OR usdt_network = '' OR usdt_network IS NULL", "TRC20")
+			} else {
+				pendingQuery = pendingQuery.Where("usdt_network = ? AND usdt_contract = ?", order.UsdtNetwork, order.UsdtContract)
+			}
+			err := pendingQuery.First(&pending).Error
 			if err == nil {
 				*order = pending
 				return nil
@@ -942,12 +978,16 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 
 var errUsdtAmountCollision = errors.New("USDT amount already reserved")
 
+var ErrUsdtTransactionAlreadyCredited = errors.New("transaction already credited")
+
 // RechargeUsdt commits the transaction claim, order status and wallet credit
 // together. Unique database constraints also protect separate server instances.
-func RechargeUsdt(tradeNo, txHash string) error {
-	if len(txHash) != 64 {
+func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
+	decoded, decodeErr := hex.DecodeString(txHash)
+	if decodeErr != nil || len(decoded) != 32 {
 		return errors.New("invalid transaction hash")
 	}
+	txHash = strings.ToLower(txHash)
 	topUp := &TopUp{}
 	quotaToAdd := 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -960,8 +1000,22 @@ func RechargeUsdt(tradeNo, txHash string) error {
 		if topUp.UsdtAddress == "" || topUp.UsdtQuota <= 0 {
 			return errors.New("legacy USDT order requires manual reconciliation")
 		}
+		isBsc := topUp.UsdtNetwork == "BSC"
+		if !isBsc && topUp.UsdtNetwork != "" && topUp.UsdtNetwork != "TRC20" {
+			return errors.New("unsupported USDT network")
+		}
+		var eventKey *string
+		if isBsc {
+			if len(logIndex) != 1 {
+				return errors.New("BSC transfer index is required")
+			}
+			key := fmt.Sprintf("56:%s:%d", txHash, logIndex[0])
+			eventKey = &key
+		} else if len(logIndex) != 0 {
+			return errors.New("unexpected transfer index")
+		}
 		if topUp.Status == common.TopUpStatusSuccess {
-			if topUp.TxHash != txHash {
+			if topUp.TxHash != txHash || (isBsc && (topUp.UsdtEventKey == nil || *topUp.UsdtEventKey != *eventKey)) {
 				return ErrTopUpStatusInvalid
 			}
 			return nil
@@ -970,15 +1024,25 @@ func RechargeUsdt(tradeNo, txHash string) error {
 			return ErrTopUpStatusInvalid
 		}
 		var used int64
-		if err := tx.Model(&TopUp{}).Where("tx_hash = ? AND id <> ?", txHash, topUp.Id).Count(&used).Error; err != nil {
+		usedQuery := tx.Model(&TopUp{}).Where("id <> ?", topUp.Id)
+		if isBsc {
+			usedQuery = usedQuery.Where("usdt_event_key = ?", *eventKey)
+		} else {
+			usedQuery = usedQuery.Where("tx_hash = ? AND (usdt_network <> ? OR usdt_network IS NULL)", txHash, "BSC")
+		}
+		if err := usedQuery.Count(&used).Error; err != nil {
 			return err
 		}
 		if used > 0 {
-			return errors.New("transaction already credited")
+			return ErrUsdtTransactionAlreadyCredited
 		}
-		result := tx.Model(topUp).Where("status = ?", topUp.Status).Updates(map[string]any{
-			"status": common.TopUpStatusSuccess, "tx_hash": txHash, "usdt_tx_hash": txHash, "complete_time": common.GetTimestamp(), "usdt_amount_key": nil,
-		})
+		updates := map[string]any{"status": common.TopUpStatusSuccess, "tx_hash": txHash, "complete_time": common.GetTimestamp(), "usdt_amount_key": nil}
+		if isBsc {
+			updates["usdt_event_key"] = eventKey
+		} else {
+			updates["usdt_tx_hash"] = txHash
+		}
+		result := tx.Model(topUp).Where("status = ?", topUp.Status).Updates(updates)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -999,10 +1063,22 @@ func RechargeUsdt(tradeNo, txHash string) error {
 	return nil
 }
 
+// Bound automatic TRC20 reconciliation without extending the payment window.
+const UsdtTrc20ReconcileGraceSeconds int64 = 10 * 60
+
+func ExpireElapsedUsdtOrders(now int64) error {
+	return DB.Model(&TopUp{}).Where("payment_provider = ? AND status = ? AND expire_time <= ?", PaymentProviderUsdt, common.TopUpStatusPending, now).Updates(map[string]any{"status": "expired", "usdt_amount_key": nil}).Error
+}
+
 func GetPendingUsdtOrders() ([]*TopUp, error) {
 	var orders []*TopUp
-	err := DB.Where("status = ? AND payment_provider = ? AND usdt_amount_key IS NOT NULL", common.TopUpStatusPending, PaymentProviderUsdt).Order("id ASC").Find(&orders).Error
+	err := DB.Where("payment_provider = ? AND ((status = ? AND usdt_amount_key IS NOT NULL) OR (usdt_network = ? AND status = ? AND (usdt_scan_complete = ? OR usdt_scan_complete IS NULL)) OR ((usdt_network = ? OR usdt_network = '' OR usdt_network IS NULL) AND status = ? AND expire_time > ?))", PaymentProviderUsdt, common.TopUpStatusPending, "BSC", "expired", false, "TRC20", "expired", time.Now().Unix()-UsdtTrc20ReconcileGraceSeconds).Order("id ASC").Find(&orders).Error
 	return orders, err
+}
+
+// Only advance after a fully validated range. Concurrent checks cannot rewind it.
+func AdvanceBscScan(orderID int, block int64, complete bool) error {
+	return DB.Model(&TopUp{}).Where("id = ? AND usdt_network = ? AND usdt_scan_block <= ?", orderID, "BSC", block).Updates(map[string]any{"usdt_scan_block": block, "usdt_scan_complete": complete}).Error
 }
 
 func ExpireUsdtOrder(orderId int) error {

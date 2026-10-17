@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { QRCodeSVG } from 'qrcode.react'
 
 import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
@@ -61,6 +62,8 @@ export function UsdtPaymentDialog(props: {
         </p>
         {!expired && (
           <>
+            <QRCodeSVG value={props.order.address} size={200} marginSize={4} className='mx-auto rounded-lg bg-white' role='img' aria-label={t('USDT payment')} />
+            <p className='text-sm'>{t('USDT address QR notice', { network: props.order.network === 'BSC' ? 'BSC (BEP20)' : 'TRON (TRC20)' })}</p>
             <p
               role='alert'
               className='border-destructive/30 bg-destructive/10 text-destructive rounded-lg border p-3 text-sm font-medium'

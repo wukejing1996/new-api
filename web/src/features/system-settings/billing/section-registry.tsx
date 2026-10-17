@@ -181,6 +181,9 @@ const BILLING_SECTIONS = [
         waffoPancakeProvisionedProductID={settings.WaffoPancakeProductID ?? ''}
         usdtDefaultValues={{
           UsdtEnabled: settings.UsdtEnabled ?? false,
+          UsdtBscEnabled: settings.UsdtBscEnabled ?? false,
+          UsdtBscReceiveAddress: settings.UsdtBscReceiveAddress ?? '',
+          UsdtBscRpcURL: '',
           UsdtMinTopUp: settings.UsdtMinTopUp ?? 10,
           UsdtReceiveAddress: settings.UsdtReceiveAddress ?? '',
           UsdtTrongridApiKey: settings.UsdtTrongridApiKey ?? '',
