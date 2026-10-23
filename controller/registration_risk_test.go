@@ -149,7 +149,7 @@ func setupRegistrationRisk(t *testing.T, withDatabase bool) (*miniredis.Miniredi
 		require.NoError(t, setting.UpdateUserGroupRateLimitConfig(previousLimits))
 	})
 	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"High Risk":1}`))
-	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`))
+	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":false,"groups":{}}`))
 	cfg := setting.DefaultRegistrationRiskConfig()
 	cfg.Enabled, cfg.TargetGroup = true, "High Risk"
 	require.NoError(t, setting.UpdateRegistrationRiskAPIKey("test-secret-key"))
@@ -658,39 +658,73 @@ func TestRegistrationRiskSettings(t *testing.T) {
 	cfg.IPRule.TriggerCount = 1
 	assert.Equal(t, 400, request(cfg, nil).Code)
 	cfg.IPRule.TriggerCount = 2
-	require.NoError(t, setting.UpdateUserGroupRateLimitConfig(`{"enabled":false,"groups":{}}`))
-	assert.Equal(t, 400, request(cfg, nil).Code)
+	for _, tc := range []struct {
+		name, limits string
+	}{
+		{"no limits configured", `{"enabled":false,"groups":{}}`},
+		{"limits disabled", `{"enabled":false,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`},
+		{"target has no limit", `{"enabled":true,"groups":{"default":{"duration_seconds":60,"max_requests":10}}}`},
+		{"target has a limit", `{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, setting.UpdateUserGroupRateLimitConfig(tc.limits))
+			response := request(cfg, nil)
+			assert.Equal(t, http.StatusOK, response.Code)
+			assert.Contains(t, response.Body.String(), `"success":true`)
+			loaded, _ := setting.GetRegistrationRiskConfig()
+			assert.True(t, loaded.Enabled)
+			assert.Equal(t, "High Risk", loaded.TargetGroup)
+		})
+	}
 }
 
 func TestRegistrationRiskRegistrationPaths(t *testing.T) {
-	_, cfg := setupRegistrationRisk(t, true)
-	previousRegister, previousPassword, previousEmail, previousDefaultToken := common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken
-	common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = true, true, false, false
-	t.Cleanup(func() {
-		common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = previousRegister, previousPassword, previousEmail, previousDefaultToken
-	})
-	var calls atomic.Int32
-	mockRegistrationIntelligence(t, strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"detections":{"disposable":false}}`, &calls)
-	c, r := registrationRiskContext("8.8.4.4")
-	c.Request.Body = io.NopCloser(strings.NewReader(`{"username":"risk-password","password":"Password123!"}`))
-	Register(c)
-	require.Contains(t, r.Body.String(), `"success":true`)
-	var passwordUser model.User
-	require.NoError(t, model.DB.Where("username = ?", "risk-password").First(&passwordUser).Error)
-	assert.Equal(t, "High Risk", passwordUser.Group)
-	c, _ = registrationRiskContext("8.8.4.4")
-	user, _, err := findOrCreateOAuthUser(c, &authFlowTestOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "oauth-id", Username: "risk-oauth", Email: "oauth@example.com"}, &oauth.OAuthToken{}, "")
-	require.NoError(t, err)
-	assert.Equal(t, "High Risk", user.Group)
-	cfg.Enabled = false
-	setRegistrationRiskConfig(t, cfg)
-	before := calls.Load()
-	user, _, err = findOrCreateOAuthUser(c, &authFlowTestOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "normal-id", Username: "normal-oauth", Email: "normal@example.com"}, &oauth.OAuthToken{}, "")
-	require.NoError(t, err)
-	assert.Equal(t, before, calls.Load())
-	assert.NotEqual(t, "High Risk", user.Group)
-	common.RegisterEnabled = false
-	_, _, err = findOrCreateOAuthUser(c, &authFlowTestOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "blocked", Username: "blocked"}, &oauth.OAuthToken{}, "")
-	require.ErrorAs(t, err, new(*OAuthRegistrationDisabledError))
-	assert.Equal(t, before, calls.Load())
+	for _, tc := range []struct {
+		name, limits string
+	}{
+		{"no limits configured", `{"enabled":false,"groups":{}}`},
+		{"limits disabled", `{"enabled":false,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`},
+		{"target has no limit", `{"enabled":true,"groups":{"default":{"duration_seconds":60,"max_requests":10}}}`},
+		{"target has a limit", `{"enabled":true,"groups":{"High Risk":{"duration_seconds":3600,"max_requests":0}}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, cfg := setupRegistrationRisk(t, true)
+			require.NoError(t, setting.UpdateUserGroupRateLimitConfig(tc.limits))
+			require.NoError(t, model.DB.AutoMigrate(&model.UserOAuthBinding{}))
+			previousRegister, previousPassword, previousEmail, previousDefaultToken := common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken
+			common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = true, true, false, false
+			t.Cleanup(func() {
+				common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = previousRegister, previousPassword, previousEmail, previousDefaultToken
+			})
+			var calls atomic.Int32
+			mockRegistrationIntelligence(t, strings.Replace(safeRegistrationIP, `"proxy":false`, `"proxy":true`, 1), `{"detections":{"disposable":false}}`, &calls)
+			c, r := registrationRiskContext("8.8.4.4")
+			c.Request.Body = io.NopCloser(strings.NewReader(`{"username":"risk-password","password":"Password123!"}`))
+			Register(c)
+			require.Contains(t, r.Body.String(), `"success":true`)
+			var passwordUser model.User
+			require.NoError(t, model.DB.Where("username = ?", "risk-password").First(&passwordUser).Error)
+			assert.Equal(t, "High Risk", passwordUser.Group)
+			c, _ = registrationRiskContext("8.8.4.4")
+			provider := oauth.NewGenericOAuthProvider(&model.CustomOAuthProvider{Id: 7, Name: "Google", Slug: "google", Enabled: true})
+			user, _, err := findOrCreateOAuthUser(c, provider, &oauth.OAuthUser{ProviderUserID: "oauth-id", Username: "risk-oauth", Email: "oauth@example.com"}, &oauth.OAuthToken{}, "")
+			require.NoError(t, err)
+			assert.Equal(t, "High Risk", user.Group)
+			bindings, err := model.GetUserOAuthBindingsByUserId(user.Id)
+			require.NoError(t, err)
+			require.Len(t, bindings, 1)
+			assert.Equal(t, "oauth-id", bindings[0].ProviderUserId)
+			cfg.Enabled = false
+			setRegistrationRiskConfig(t, cfg)
+			before := calls.Load()
+			user, _, err = findOrCreateOAuthUser(c, &authFlowTestOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "normal-id", Username: "normal-oauth", Email: "normal@example.com"}, &oauth.OAuthToken{}, "")
+			require.NoError(t, err)
+			assert.Equal(t, before, calls.Load())
+			assert.NotEqual(t, "High Risk", user.Group)
+			common.RegisterEnabled = false
+			_, _, err = findOrCreateOAuthUser(c, &authFlowTestOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "blocked", Username: "blocked"}, &oauth.OAuthToken{}, "")
+			require.ErrorAs(t, err, new(*OAuthRegistrationDisabledError))
+			assert.Equal(t, before, calls.Load())
+		})
+	}
 }

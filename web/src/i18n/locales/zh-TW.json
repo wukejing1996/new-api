@@ -6833,6 +6833,7 @@
     "Users call": "使用者呼叫",
     "Users call the model on the left. The platform forwards the request to the upstream model on the right.": "用戶呼叫左側的模型。平台將請求轉發給右側的上游模型。",
     "Users in {{group}}": "{{group}} 分組的用戶",
+    "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.": "符合風險規則的使用者將分配到此群組。群組速率限制為選用設定，不影響註冊。",
     "Users must wait for a successful drawing before upscales or variations.": "用戶必須等待成功的繪圖完成，才能進行放大或變體。",
     "Users of vip, when billed as premium, pay ratio": "vip 分組的用戶，按 premium 收費時，倍率用",
     "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.": "用戶只能看到標記為用戶可選的分組。不可選分組仍可由管理員分配。",

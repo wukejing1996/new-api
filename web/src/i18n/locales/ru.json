@@ -6833,6 +6833,7 @@
     "Users call": "Пользователь вызывает",
     "Users call the model on the left. The platform forwards the request to the upstream model on the right.": "Пользователи вызывают модель слева. Платформа перенаправляет запрос вышестоящей модели справа.",
     "Users in {{group}}": "Пользователи группы {{group}}",
+    "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.": "Пользователи, соответствующие правилам риска, попадают в эту группу. Ограничения частоты запросов группы необязательны и не влияют на регистрацию.",
     "Users must wait for a successful drawing before upscales or variations.": "Пользователи должны дождаться успешного рисунка перед апскейлом или вариациями.",
     "Users of vip, when billed as premium, pay ratio": "Пользователи vip при тарификации по premium платят коэффициент",
     "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.": "Пользователи видят только группы, отмеченные как доступные для выбора. Недоступные для выбора группы всё равно могут назначаться администраторами.",

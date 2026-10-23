@@ -6833,6 +6833,7 @@
     "Users call": "Users call",
     "Users call the model on the left. The platform forwards the request to the upstream model on the right.": "Users call the model on the left. The platform forwards the request to the upstream model on the right.",
     "Users in {{group}}": "Users in {{group}}",
+    "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.": "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.",
     "Users must wait for a successful drawing before upscales or variations.": "Users must wait for a successful drawing before upscales or variations.",
     "Users of vip, when billed as premium, pay ratio": "Users of vip, when billed as premium, pay ratio",
     "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.": "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.",

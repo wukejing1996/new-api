@@ -172,7 +172,7 @@ export function RegistrationRisk() {
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'Enable a user group rate limit for this group first. Set its maximum requests to 0 to prevent upstream calls.'
+                        'Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.'
                       )}
                     </FormDescription>
                     <FormMessage />

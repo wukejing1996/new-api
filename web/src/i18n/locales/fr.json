@@ -6833,6 +6833,7 @@
     "Users call": "Appelé par l’utilisateur",
     "Users call the model on the left. The platform forwards the request to the upstream model on the right.": "Les utilisateurs appellent le modèle à gauche. La plateforme transmet la requête au modèle amont à droite.",
     "Users in {{group}}": "Utilisateurs du groupe {{group}}",
+    "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.": "Les utilisateurs correspondant aux règles de risque sont affectés à ce groupe. Les limites de requêtes du groupe sont facultatives et ne bloquent pas l’inscription.",
     "Users must wait for a successful drawing before upscales or variations.": "Les utilisateurs doivent attendre une génération réussie avant les upscales ou variations.",
     "Users of vip, when billed as premium, pay ratio": "Les utilisateurs de vip, facturés sous premium, paient le taux",
     "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.": "Les utilisateurs ne voient que les groupes marqués comme sélectionnables. Les groupes non sélectionnables peuvent toujours être attribués par les administrateurs.",

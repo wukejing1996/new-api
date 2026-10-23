@@ -6833,6 +6833,7 @@
     "Users call": "ユーザーの指定",
     "Users call the model on the left. The platform forwards the request to the upstream model on the right.": "ユーザーは左側のモデルを呼び出します。プラットフォームはリクエストを右側のアップストリームモデルに転送します。",
     "Users in {{group}}": "{{group}} のユーザー",
+    "Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.": "リスクルールに該当するユーザーをこのグループに割り当てます。グループのレート制限は任意で、登録には影響しません。",
     "Users must wait for a successful drawing before upscales or variations.": "アップスケールやバリエーションを行う前に、ユーザーは成功した描画を待つ必要があります。",
     "Users of vip, when billed as premium, pay ratio": "vip グループのユーザーが premium として課金されるときの倍率は",
     "Users only see groups marked as user selectable. Non-selectable groups can still be assigned by administrators.": "ユーザーにはユーザー選択可のグループだけが表示されます。選択不可グループも管理者は割り当てできます。",

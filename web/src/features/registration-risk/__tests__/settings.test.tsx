@@ -199,10 +199,16 @@ describe('registration risk settings', () => {
 
   it('saves selected rules while preserving a blank configured API key', async () => {
     const user = userEvent.setup()
+    settings.target_limit_enabled = false
     fixture()
     const key = await screen.findByLabelText('proxycheck.io API key')
     expect(key).toHaveValue('')
     expect(key).toHaveAttribute('type', 'password')
+    expect(
+      screen.getByRole('combobox', { name: 'Risk user group' })
+    ).toHaveAccessibleDescription(
+      'Users matching risk rules are assigned to this group. Group rate limits are optional and do not affect registration.'
+    )
     await user.click(
       screen.getByRole('switch', { name: 'Enable new user risk control' })
     )

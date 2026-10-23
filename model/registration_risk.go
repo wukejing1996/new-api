@@ -19,9 +19,6 @@ func ValidateRegistrationRiskTarget(cfg setting.RegistrationRiskConfig) error {
 	if _, exists := ratio_setting.GetGroupRatioCopy()[cfg.TargetGroup]; !exists {
 		return fmt.Errorf("the registration risk target group does not exist")
 	}
-	if _, enabled := setting.GetUserGroupRateLimit(cfg.TargetGroup); !enabled {
-		return fmt.Errorf("enable a user group rate limit for the registration risk target group first")
-	}
 	if (cfg.IPRule.Enabled || cfg.SubnetRule.Enabled) && (!common.RedisEnabled || common.RDB == nil) {
 		return fmt.Errorf("registration association detection requires Redis")
 	}
