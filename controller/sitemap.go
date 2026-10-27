@@ -80,8 +80,15 @@ func buildSitemapURLs(baseURL string, posts []model.BlogPostListItem) []sitemapU
 		if post.Slug == "" {
 			continue
 		}
+		locale := post.Locale
+		if locale == "" {
+			locale = "en"
+		}
+		if locale == "zh" || !model.IsBlogLocale(locale) {
+			continue
+		}
 		url := sitemapURL{
-			Loc: baseURL + "/en/blog/" + post.Slug,
+			Loc: baseURL + "/" + locale + "/blog/" + post.Slug,
 		}
 		if post.UpdatedAt > 0 {
 			url.LastMod = time.Unix(post.UpdatedAt, 0).UTC().Format(sitemapDateFormat)

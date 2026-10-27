@@ -21,6 +21,16 @@ type publishedBlogListResponse struct {
 	} `json:"data"`
 }
 
+func TestBlogRejectsUnsupportedLocale(t *testing.T) {
+	for _, handler := range []gin.HandlerFunc{GetPublishedBlogPosts, GetPublishedBlogPost, RecordPublishedBlogPostView, AdminListBlogPosts} {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodGet, "/api/blog/posts?locale=en-US", nil)
+		handler(context)
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
+	}
+}
+
 func TestPublishedBlogListUsesSeparateCoverEndpoint(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.BlogPost{}))

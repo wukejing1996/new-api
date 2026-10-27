@@ -50,6 +50,18 @@ func TestSitemapCanonicalArticlesAndAccurateDates(t *testing.T) {
 	updatedURLs := buildSitemapURLs("https://costrouter.ai", posts)
 	require.Len(t, updatedURLs, 51)
 	assert.Equal(t, "https://costrouter.ai/en/blog/just-published", updatedURLs[50].Loc)
+
+	localized := buildSitemapURLs("https://costrouter.ai", []model.BlogPostListItem{
+		{Slug: "shared", Locale: "en"},
+		{Slug: "shared", Locale: "fr"},
+		{Slug: "shared", Locale: "ja"},
+		{Slug: "hidden", Locale: "zh"},
+		{Slug: "invalid", Locale: "unsupported"},
+	})
+	require.Len(t, localized, 51)
+	assert.Equal(t, "https://costrouter.ai/en/blog/shared", localized[48].Loc)
+	assert.Equal(t, "https://costrouter.ai/fr/blog/shared", localized[49].Loc)
+	assert.Equal(t, "https://costrouter.ai/ja/blog/shared", localized[50].Loc)
 }
 
 func TestSitemapProductionHostCanonicalization(t *testing.T) {

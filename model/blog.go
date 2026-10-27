@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -28,7 +29,8 @@ var (
 type BlogPost struct {
 	Id int `json:"id"`
 
-	Slug string `json:"slug" gorm:"type:varchar(160);not null;uniqueIndex"`
+	Slug   string `json:"slug" gorm:"type:varchar(160);not null;uniqueIndex:idx_blog_locale_slug,priority:2"`
+	Locale string `json:"locale" gorm:"type:varchar(16);not null;default:en;uniqueIndex:idx_blog_locale_slug,priority:1;index:idx_blog_locale_status_published,priority:1"`
 
 	Title       string `json:"title" gorm:"type:varchar(255);not null"`
 	Excerpt     string `json:"excerpt" gorm:"type:text"`
@@ -36,8 +38,8 @@ type BlogPost struct {
 	ContentJSON string `json:"content_json" gorm:"type:text"`
 	CoverImage  string `json:"cover_image" gorm:"type:text"`
 
-	Status      string `json:"status" gorm:"type:varchar(32);not null;default:'draft';index"`
-	PublishedAt int64  `json:"published_at" gorm:"bigint;index"`
+	Status      string `json:"status" gorm:"type:varchar(32);not null;default:'draft';index;index:idx_blog_locale_status_published,priority:2"`
+	PublishedAt int64  `json:"published_at" gorm:"bigint;index;index:idx_blog_locale_status_published,priority:3,sort:desc"`
 	AuthorId    int    `json:"author_id" gorm:"index"`
 	ViewCount   int64  `json:"view_count" gorm:"bigint;not null;default:0;index"`
 
@@ -47,14 +49,22 @@ type BlogPost struct {
 	OGImage        string `json:"og_image" gorm:"type:text"`
 	Keywords       string `json:"keywords" gorm:"type:varchar(512)"`
 
-	CreatedAt int64 `json:"created_at" gorm:"bigint"`
-	UpdatedAt int64 `json:"updated_at" gorm:"bigint;index"`
+	CreatedAt int64             `json:"created_at" gorm:"bigint"`
+	UpdatedAt int64             `json:"updated_at" gorm:"bigint;index"`
+	Versions  []BlogPostVersion `json:"versions,omitempty" gorm:"-"`
+}
+
+type BlogPostVersion struct {
+	Id     int    `json:"id"`
+	Locale string `json:"locale"`
+	Status string `json:"status"`
 }
 
 type BlogPostListItem struct {
 	Id int `json:"id"`
 
-	Slug string `json:"slug"`
+	Slug   string `json:"slug"`
+	Locale string `json:"locale"`
 
 	Title         string `json:"title"`
 	Excerpt       string `json:"excerpt"`
@@ -81,6 +91,7 @@ type AdminBlogPostQuery struct {
 	Offset   int
 	Limit    int
 	ListView bool
+	Locale   string
 }
 
 type BlogPostSort string
@@ -110,6 +121,9 @@ func (p *BlogPost) BeforeUpdate(tx *gorm.DB) error {
 func ValidateAndNormalizeBlogPost(post *BlogPost) error {
 	if post == nil {
 		return errors.New("article is required")
+	}
+	if !IsBlogLocale(post.Locale) {
+		return errors.New("article locale is required and must be supported")
 	}
 	post.Slug = strings.TrimSpace(strings.ToLower(post.Slug))
 	post.Title = strings.TrimSpace(post.Title)
@@ -163,9 +177,13 @@ func sanitizeBlogHTML(value string) string {
 	return strings.TrimSpace(cleaned)
 }
 
-func GetPublishedBlogPosts(offset int, limit int, sort string) ([]BlogPostListItem, int64, error) {
+func IsBlogLocale(locale string) bool {
+	return slices.Contains([]string{"en", "zh", "fr", "ja", "ko", "ru", "vi"}, locale)
+}
+
+func GetPublishedBlogPosts(offset int, limit int, sort string, locale string) ([]BlogPostListItem, int64, error) {
 	var posts []BlogPostListItem
-	query := DB.Model(&BlogPost{}).Where("status = ?", BlogPostStatusPublished)
+	query := DB.Model(&BlogPost{}).Where("status = ? AND locale = ?", BlogPostStatusPublished, locale)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -185,16 +203,19 @@ func GetAllPublishedBlogPostsForSitemap() ([]BlogPostListItem, error) {
 	var posts []BlogPostListItem
 	err := DB.Model(&BlogPost{}).
 		Where("status = ?", BlogPostStatusPublished).
-		Select([]string{"id", "slug", "updated_at"}).
+		Select([]string{"id", "slug", "locale", "updated_at"}).
 		Order("published_at desc, id desc").
 		Find(&posts).Error
 	return posts, err
 }
 
-func GetPublishedBlogPost(slug string) (*BlogPost, error) {
+func GetPublishedBlogPost(slug string, locale string) (*BlogPost, error) {
 	var post BlogPost
-	query := DB.Where("status = ? AND slug = ?", BlogPostStatusPublished, strings.TrimSpace(slug))
+	query := DB.Where("status = ? AND slug = ? AND locale = ?", BlogPostStatusPublished, strings.TrimSpace(slug), locale)
 	if err := query.First(&post).Error; err != nil {
+		return nil, err
+	}
+	if err := DB.Model(&BlogPost{}).Select("id, locale, status").Where("slug = ? AND status = ?", post.Slug, BlogPostStatusPublished).Order("id asc").Find(&post.Versions).Error; err != nil {
 		return nil, err
 	}
 	return &post, nil
@@ -217,13 +238,13 @@ func GetBlogPostCover(id int, publishedOnly bool) (string, error) {
 	return post.CoverImage, nil
 }
 
-func IncrementPublishedBlogPostView(slug string) (int64, error) {
+func IncrementPublishedBlogPostView(slug string, locale string) (int64, error) {
 	slug = strings.TrimSpace(slug)
 	if slug == "" {
 		return 0, gorm.ErrRecordNotFound
 	}
 
-	query := DB.Model(&BlogPost{}).Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
+	query := DB.Model(&BlogPost{}).Where("status = ? AND slug = ? AND locale = ?", BlogPostStatusPublished, slug, locale)
 
 	result := query.UpdateColumn("view_count", gorm.Expr("COALESCE(view_count, 0) + ?", 1))
 	if result.Error != nil {
@@ -234,7 +255,7 @@ func IncrementPublishedBlogPostView(slug string) (int64, error) {
 	}
 
 	var post BlogPost
-	lookup := DB.Model(&BlogPost{}).Select("view_count").Where("status = ? AND slug = ?", BlogPostStatusPublished, slug)
+	lookup := DB.Model(&BlogPost{}).Select("view_count").Where("status = ? AND slug = ? AND locale = ?", BlogPostStatusPublished, slug, locale)
 	if err := lookup.First(&post).Error; err != nil {
 		return 0, err
 	}
@@ -244,6 +265,9 @@ func IncrementPublishedBlogPostView(slug string) (int64, error) {
 func AdminListBlogPosts(params AdminBlogPostQuery) ([]BlogPostListItem, int64, error) {
 	var posts []BlogPostListItem
 	query := DB.Model(&BlogPost{})
+	if params.Locale != "" {
+		query = query.Where("locale = ?", params.Locale)
+	}
 	if status := strings.TrimSpace(params.Status); status != "" {
 		query = query.Where("status = ?", normalizeBlogStatus(status))
 	}
@@ -272,6 +296,9 @@ func GetBlogPostById(id int) (*BlogPost, error) {
 	if err := DB.Where("id = ?", id).First(&post).Error; err != nil {
 		return nil, err
 	}
+	if err := DB.Model(&BlogPost{}).Select("id, locale, status").Where("slug = ?", post.Slug).Order("id asc").Find(&post.Versions).Error; err != nil {
+		return nil, err
+	}
 	return &post, nil
 }
 
@@ -286,7 +313,7 @@ func UpdateBlogPost(post *BlogPost) error {
 	if post == nil || post.Id <= 0 {
 		return errors.New("invalid article id")
 	}
-	update := map[string]interface{}{
+	update := map[string]any{
 		"slug":            post.Slug,
 		"title":           post.Title,
 		"excerpt":         post.Excerpt,
@@ -322,7 +349,21 @@ func UpdateBlogPost(post *BlogPost) error {
 }
 
 func DeleteBlogPost(id int) error {
-	return DB.Where("id = ?", id).Delete(&BlogPost{}).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var post BlogPost
+		if err := tx.First(&post, id).Error; err != nil {
+			return err
+		}
+		var anchor BlogPost
+		if err := lockForUpdate(tx).Where("slug = ? AND locale = ?", post.Slug, "en").First(&anchor).Error; err != nil {
+			return err
+		}
+		query := tx.Where("id = ? AND slug = ?", id, post.Slug)
+		if post.Locale == "en" {
+			query = tx.Where("slug = ?", post.Slug)
+		}
+		return query.Delete(&BlogPost{}).Error
+	})
 }
 
 func SetBlogPostPublished(id int, published bool) (*BlogPost, error) {
@@ -330,17 +371,18 @@ func SetBlogPostPublished(id int, published bool) (*BlogPost, error) {
 	if err != nil {
 		return nil, err
 	}
-	post.Status = BlogPostStatusDraft
+	action := "unpublish"
+	var locales []string
 	if published {
-		post.Status = BlogPostStatusPublished
-		if post.PublishedAt == 0 {
-			post.PublishedAt = common.GetTimestamp()
-		}
-		if post.ViewCount == 0 {
-			post.ViewCount = randomBlogInitialViewCount()
+		action = "publish"
+		locales = []string{"en", post.Locale}
+		for _, version := range post.Versions {
+			if version.Status == BlogPostStatusPublished {
+				locales = append(locales, version.Locale)
+			}
 		}
 	}
-	if err := DB.Save(post).Error; err != nil {
+	if err := SaveBlogPublication(post, locales, action); err != nil {
 		return nil, err
 	}
 	return post, nil
@@ -359,7 +401,7 @@ func IsBlogPostSlugConflict(err error) bool {
 }
 
 func blogPostListSelect(includeCoverImage bool) []string {
-	fields := []string{"id", "slug", "title", "excerpt", "CASE WHEN cover_image IS NOT NULL AND cover_image <> '' THEN TRUE ELSE FALSE END AS has_cover_image", "status", "published_at", "author_id", "view_count", "created_at", "updated_at"}
+	fields := []string{"id", "slug", "locale", "title", "excerpt", "CASE WHEN cover_image IS NOT NULL AND cover_image <> '' THEN TRUE ELSE FALSE END AS has_cover_image", "status", "published_at", "author_id", "view_count", "created_at", "updated_at"}
 	if includeCoverImage {
 		fields = append(fields, "cover_image", "seo_title", "seo_description", "canonical_url", "og_image", "keywords")
 	}

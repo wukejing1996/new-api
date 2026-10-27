@@ -14,12 +14,18 @@ import (
 )
 
 type BlogPostRequest struct {
-	Post model.BlogPost `json:"post"`
+	Post               model.BlogPost `json:"post"`
+	PublicationLocales []string       `json:"publication_locales"`
+	Action             string         `json:"action"`
 }
 
 func GetPublishedBlogPosts(c *gin.Context) {
+	locale, ok := blogLocaleFromRequest(c)
+	if !ok {
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
-	posts, total, err := model.GetPublishedBlogPosts(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.Query("sort"))
+	posts, total, err := model.GetPublishedBlogPosts(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), c.Query("sort"), locale)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -30,7 +36,11 @@ func GetPublishedBlogPosts(c *gin.Context) {
 }
 
 func GetPublishedBlogPost(c *gin.Context) {
-	post, err := model.GetPublishedBlogPost(c.Param("slug"))
+	locale, ok := blogLocaleFromRequest(c)
+	if !ok {
+		return
+	}
+	post, err := model.GetPublishedBlogPost(c.Param("slug"), locale)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
@@ -113,7 +123,11 @@ func decodeBlogCoverDataURL(dataURL string) (string, []byte, error) {
 }
 
 func RecordPublishedBlogPostView(c *gin.Context) {
-	viewCount, err := model.IncrementPublishedBlogPostView(c.Param("slug"))
+	locale, ok := blogLocaleFromRequest(c)
+	if !ok {
+		return
+	}
+	viewCount, err := model.IncrementPublishedBlogPostView(c.Param("slug"), locale)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
@@ -127,6 +141,10 @@ func RecordPublishedBlogPostView(c *gin.Context) {
 
 func AdminListBlogPosts(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store")
+	if locale := c.Query("locale"); locale != "" && !model.IsBlogLocale(locale) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Unsupported article locale"})
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
 	posts, total, err := model.AdminListBlogPosts(model.AdminBlogPostQuery{
 		Status:   c.Query("status"),
@@ -134,6 +152,7 @@ func AdminListBlogPosts(c *gin.Context) {
 		Offset:   pageInfo.GetStartIdx(),
 		Limit:    pageInfo.GetPageSize(),
 		ListView: c.Query("view") == "list",
+		Locale:   c.Query("locale"),
 	})
 	if err != nil {
 		common.ApiError(c, err)
@@ -180,8 +199,11 @@ func AdminCreateBlogPost(c *gin.Context) {
 	if id := c.GetInt("id"); id > 0 {
 		post.AuthorId = id
 	}
-	if err := model.CreateBlogPost(&post); err != nil {
-		if model.IsBlogPostSlugConflict(err) {
+	if req.Action == "" {
+		req.Action = "save"
+	}
+	if err := model.SaveBlogPublication(&post, req.PublicationLocales, req.Action); err != nil {
+		if errors.Is(err, model.ErrBlogSlugConflict) || model.IsBlogPostSlugConflict(err) {
 			common.ApiErrorMsg(c, "Article slug already exists")
 			return
 		}
@@ -211,19 +233,22 @@ func AdminUpdateBlogPost(c *gin.Context) {
 	if post.Status == model.BlogPostStatusPublished && post.PublishedAt == 0 {
 		post.PublishedAt = common.GetTimestamp()
 	}
-	if err := model.UpdateBlogPost(&post); err != nil {
+	if req.Action == "" {
+		req.Action = "save"
+	}
+	if err := model.SaveBlogPublication(&post, req.PublicationLocales, req.Action); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Article not found"})
 			return
 		}
-		if model.IsBlogPostSlugConflict(err) {
+		if errors.Is(err, model.ErrBlogSlugConflict) || model.IsBlogPostSlugConflict(err) {
 			common.ApiErrorMsg(c, "Article slug already exists")
 			return
 		}
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, nil)
+	common.ApiSuccess(c, post)
 }
 
 func AdminDeleteBlogPost(c *gin.Context) {
@@ -263,6 +288,15 @@ func updateBlogPostPublishState(c *gin.Context, published bool) {
 		return
 	}
 	common.ApiSuccess(c, post)
+}
+
+func blogLocaleFromRequest(c *gin.Context) (string, bool) {
+	locale := c.DefaultQuery("locale", "en")
+	if !model.IsBlogLocale(locale) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Unsupported article locale"})
+		return "", false
+	}
+	return locale, true
 }
 
 func parseBlogPostId(c *gin.Context) (int, error) {
