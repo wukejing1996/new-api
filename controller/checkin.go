@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 func GetCheckinStatus(c *gin.Context) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
-		common.ApiErrorMsg(c, "Check-in is disabled")
+		common.ApiErrorT(c, "Check-in feature is not enabled")
 		return
 	}
 	userId := c.GetInt("id")
@@ -25,10 +24,7 @@ func GetCheckinStatus(c *gin.Context) {
 
 	stats, err := model.GetUserCheckinStats(userId, month)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
 
@@ -47,7 +43,7 @@ func GetCheckinStatus(c *gin.Context) {
 func DoCheckin(c *gin.Context) {
 	setting := operation_setting.GetCheckinSetting()
 	if !setting.Enabled {
-		common.ApiErrorMsg(c, "Check-in is disabled")
+		common.ApiErrorT(c, "Check-in feature is not enabled")
 		return
 	}
 
@@ -55,18 +51,12 @@ func DoCheckin(c *gin.Context) {
 
 	checkin, err := model.UserCheckin(userId)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
-	model.RecordLog(userId, model.LogTypeSystem, fmt.Sprintf("User checked in and received %s quota", logger.FormatQuota(checkin.QuotaAwarded)))
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Check-in successful",
-		"data": gin.H{
-			"quota_awarded": checkin.QuotaAwarded,
-			"checkin_date":  checkin.CheckinDate},
+	model.RecordLog(userId, model.LogTypeSystem, common.NewMessage("Daily check-in, received {{quota}}", map[string]any{"quota": logger.FormatQuota(checkin.QuotaAwarded)}))
+	common.ApiSuccessT(c, "Check-in successful", gin.H{
+		"quota_awarded": checkin.QuotaAwarded,
+		"checkin_date":  checkin.CheckinDate,
 	})
 }

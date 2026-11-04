@@ -31,7 +31,6 @@ func TestTokenCalculatorHTTPContract(t *testing.T) {
 	withTieredBillingConfig(t, map[string]string{"calculator-test-model": "tiered_expr"}, map[string]string{"calculator-test-model": `tier("base", p*2+c*4)`})
 	require.NoError(t, db.Create(&model.Ability{Group: "calculator-public", Model: "calculator-test-model", ChannelId: 1, Enabled: true}).Error)
 	require.NoError(t, db.Create(&model.User{Id: 91234, Username: "calculator-member", Password: "test", Group: "calculator-member", Quota: 123456, Status: common.UserStatusEnabled}).Error)
-	service.InitTokenEncoders()
 	for _, tc := range []struct {
 		name, body string
 		id, status int

@@ -29,9 +29,16 @@ func toOllamaResponseFormat(responseFormat *dto.ResponseFormat) (any, error) {
 		if len(responseFormat.JsonSchema) == 0 {
 			return nil, nil
 		}
-		var jsonSchema dto.FormatJsonSchema
+		// The raw schema keeps the client's property order, which the
+		// model fills the properties in.
+		var jsonSchema struct {
+			Schema common.RawMessage `json:"schema"`
+		}
 		if err := common.Unmarshal(responseFormat.JsonSchema, &jsonSchema); err != nil {
 			return nil, fmt.Errorf("invalid ollama response format: %w", err)
+		}
+		if len(jsonSchema.Schema) == 0 || common.GetJsonType(jsonSchema.Schema) == "null" {
+			return nil, nil
 		}
 		return jsonSchema.Schema, nil
 	default:
@@ -381,7 +388,7 @@ func PullOllamaModel(baseURL, apiKey, modelName string) error {
 
 	requestBody, err := common.Marshal(pullRequest)
 	if err != nil {
-		return fmt.Errorf("failed to serialize request: %v", err)
+		return fmt.Errorf("failed to marshal request: %v", err)
 	}
 
 	client := &http.Client{
@@ -405,7 +412,7 @@ func PullOllamaModel(baseURL, apiKey, modelName string) error {
 
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("failed to pull model %d: %s", response.StatusCode, string(body))
+		return fmt.Errorf("failed to pull model, status %d: %s", response.StatusCode, string(body))
 	}
 
 	return nil
@@ -422,7 +429,7 @@ func PullOllamaModelStream(baseURL, apiKey, modelName string, progressCallback f
 
 	requestBody, err := common.Marshal(pullRequest)
 	if err != nil {
-		return fmt.Errorf("failed to serialize request: %v", err)
+		return fmt.Errorf("failed to marshal request: %v", err)
 	}
 
 	client := &http.Client{
@@ -446,7 +453,7 @@ func PullOllamaModelStream(baseURL, apiKey, modelName string, progressCallback f
 
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("failed to pull model %d: %s", response.StatusCode, string(body))
+		return fmt.Errorf("failed to pull model, status %d: %s", response.StatusCode, string(body))
 	}
 
 	// 读取流式响应
@@ -478,11 +485,11 @@ func PullOllamaModelStream(baseURL, apiKey, modelName string, progressCallback f
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to read streaming response: %v", err)
+		return fmt.Errorf("failed to read stream response: %v", err)
 	}
 
 	if !successful {
-		return fmt.Errorf("model pull did not complete: success status was not received")
+		return fmt.Errorf("model pull did not complete: no success status received")
 	}
 
 	return nil
@@ -498,7 +505,7 @@ func DeleteOllamaModel(baseURL, apiKey, modelName string) error {
 
 	requestBody, err := common.Marshal(deleteRequest)
 	if err != nil {
-		return fmt.Errorf("failed to serialize request: %v", err)
+		return fmt.Errorf("failed to marshal request: %v", err)
 	}
 
 	client := &http.Client{}
@@ -520,7 +527,7 @@ func DeleteOllamaModel(baseURL, apiKey, modelName string) error {
 
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("failed to delete model %d: %s", response.StatusCode, string(body))
+		return fmt.Errorf("failed to delete model, status %d: %s", response.StatusCode, string(body))
 	}
 
 	return nil
@@ -529,7 +536,7 @@ func DeleteOllamaModel(baseURL, apiKey, modelName string) error {
 func FetchOllamaVersion(baseURL, apiKey string) (string, error) {
 	trimmedBase := strings.TrimRight(baseURL, "/")
 	if trimmedBase == "" {
-		return "", fmt.Errorf("baseURL is required")
+		return "", fmt.Errorf("baseURL is empty")
 	}
 
 	url := fmt.Sprintf("%s/api/version", trimmedBase)
@@ -556,7 +563,7 @@ func FetchOllamaVersion(baseURL, apiKey string) (string, error) {
 	}
 
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to query version %d: %s", response.StatusCode, string(body))
+		return "", fmt.Errorf("failed to query version, status %d: %s", response.StatusCode, string(body))
 	}
 
 	var versionResp struct {
@@ -568,7 +575,7 @@ func FetchOllamaVersion(baseURL, apiKey string) (string, error) {
 	}
 
 	if versionResp.Version == "" {
-		return "", fmt.Errorf("version information was not returned")
+		return "", fmt.Errorf("no version information returned")
 	}
 
 	return versionResp.Version, nil

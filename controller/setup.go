@@ -46,10 +46,7 @@ func GetSetup(c *gin.Context) {
 func PostSetup(c *gin.Context) {
 	// Check if setup is already completed
 	if constant.Setup {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "system has already been initialized",
-		})
+		common.ApiErrorT(c, "The system is already initialized")
 		return
 	}
 
@@ -59,10 +56,7 @@ func PostSetup(c *gin.Context) {
 	var req SetupRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "invalid request parameters",
-		})
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 
@@ -70,18 +64,12 @@ func PostSetup(c *gin.Context) {
 	if !rootExists {
 		// Validate username length: max 12 characters to align with model.User validation
 		if len(req.Username) > 12 {
-			c.JSON(200, gin.H{
-				"success": false,
-				"message": "username cannot exceed 12 characters",
-			})
+			common.ApiErrorT(c, "Username must be {{max}} characters or fewer", map[string]any{"max": 12})
 			return
 		}
 		// Validate password
 		if req.Password != req.ConfirmPassword {
-			c.JSON(200, gin.H{
-				"success": false,
-				"message": "the two passwords do not match",
-			})
+			common.ApiErrorT(c, "Passwords do not match")
 			return
 		}
 
@@ -96,10 +84,7 @@ func PostSetup(c *gin.Context) {
 		// Create root user
 		hashedPassword, err := common.HashAccountPassword(req.Password)
 		if err != nil {
-			c.JSON(200, gin.H{
-				"success": false,
-				"message": "system error: " + err.Error(),
-			})
+			common.ApiErrorT(c, "System error: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
 		rootUser := model.User{
@@ -113,10 +98,7 @@ func PostSetup(c *gin.Context) {
 		}
 		err = model.DB.Create(&rootUser).Error
 		if err != nil {
-			c.JSON(200, gin.H{
-				"success": false,
-				"message": "failed to create administrator account: " + err.Error(),
-			})
+			common.ApiErrorT(c, "Failed to create the administrator account: {{error}}", map[string]any{"error": err.Error()})
 			return
 		}
 	}
@@ -128,19 +110,13 @@ func PostSetup(c *gin.Context) {
 	// Save operation modes to database for persistence
 	err = model.UpdateOption("SelfUseModeEnabled", boolToString(req.SelfUseModeEnabled))
 	if err != nil {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "failed to save self-use mode setting: " + err.Error(),
-		})
+		common.ApiErrorT(c, "Failed to save the self-use mode setting: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 
 	err = model.UpdateOption("DemoSiteEnabled", boolToString(req.DemoSiteEnabled))
 	if err != nil {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "failed to save demo site mode setting: " + err.Error(),
-		})
+		common.ApiErrorT(c, "Failed to save the demo site mode setting: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -153,17 +129,11 @@ func PostSetup(c *gin.Context) {
 	}
 	err = model.DB.Create(&setup).Error
 	if err != nil {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "system initialization failed: " + err.Error(),
-		})
+		common.ApiErrorT(c, "Failed to initialize the system: {{error}}", map[string]any{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "系统初始化成功",
-	})
+	common.ApiSuccessT(c, "System initialized successfully", nil)
 }
 
 func boolToString(b bool) string {

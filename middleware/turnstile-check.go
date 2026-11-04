@@ -25,10 +25,7 @@ func VerifyTurnstile(c *gin.Context) bool {
 	if common.TurnstileCheckEnabled {
 		response := c.Query("turnstile")
 		if response == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Turnstile token is required",
-			})
+			common.ApiErrorT(c, "Turnstile token is empty")
 			c.Abort()
 			return false
 		}
@@ -59,10 +56,7 @@ func VerifyTurnstile(c *gin.Context) bool {
 			return false
 		}
 		if !res.Success {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Turnstile verification failed. Please refresh and try again.",
-			})
+			common.ApiErrorT(c, "Turnstile verification failed, please refresh and try again!")
 			c.Abort()
 			return false
 		}

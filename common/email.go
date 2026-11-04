@@ -81,6 +81,20 @@ func SendEmail(subject string, receiver string, content string) error {
 }
 
 func SendEmailContext(ctx context.Context, subject string, receiver string, content string) error {
+	OptionMapRWMutex.RLock()
+	provider := OptionMap["EmailProvider"]
+	resendKey := OptionMap["ResendApiKey"]
+	resendFrom := OptionMap["ResendFrom"]
+	OptionMapRWMutex.RUnlock()
+	// One selector controls delivery. Never fall back to a second provider:
+	// a failed response does not prove that the first provider did not send.
+	switch provider {
+	case "resend":
+		return sendResendEmailContext(ctx, resendKey, resendFrom, subject, receiver, content)
+	case "", "smtp": // Preserve existing installations without a selector.
+	default:
+		return NewMessage("Email sending method must be SMTP or Resend")
+	}
 	if SMTPFrom == "" { // for compatibility
 		SMTPFrom = SMTPAccount
 	}
@@ -89,7 +103,7 @@ func SendEmailContext(ctx context.Context, subject string, receiver string, cont
 		return err2
 	}
 	if SMTPServer == "" && SMTPAccount == "" {
-		return fmt.Errorf("SMTP server is not configured")
+		return NewMessage("SMTP server is not configured")
 	}
 	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
 	encodedFromName := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(emailDisplayName())))
@@ -137,7 +151,7 @@ func SendEmailContext(ctx context.Context, subject string, receiver string, cont
 	}
 	err = client.Quit()
 	if _, bounded := ctx.Deadline(); err != nil && !bounded {
-		SysError(fmt.Sprintf("failed to send email to %s: %v", receiver, err))
+		SysError(LogText("failed to send email to %s: %v", receiver, err))
 	}
 	return err
 }

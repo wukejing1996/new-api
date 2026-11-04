@@ -24,21 +24,26 @@ import { toast } from 'sonner'
 
 import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { ButtonGroup } from '@/components/ui/button-group'
 import {
   buildPricingChanges,
   getModelPricing,
   saveModelPricing,
   invalidateModelPricing,
   type ModelPricingConfig,
+  type ModelPricingChange,
 } from '@/features/model-pricing/api'
+import {
+  getSitePricingCurrency,
+  isValidPricingCurrency,
+} from '@/features/model-pricing/currency'
 import { applyPriceSyncSelections } from '@/features/model-pricing/pricing'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
   requireServerSuccess,
   createServerError,
 } from '@/lib/server-error-message'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { fetchUpstreamRatios, getUpstreamChannels } from '../api'
 import type {
@@ -62,11 +67,16 @@ import {
   OPENROUTER_CHANNEL_TYPE,
   OPENROUTER_ENDPOINT,
 } from './constants'
+import { PriceAdjustmentSelect } from './price-adjustment-select'
+import {
+  adjustSyncPrice,
+  type PriceAdjustment,
+} from './upstream-price-adjustment'
 import {
   describeSyncPrice,
+  getSyncExpressionPricing,
   getUpstreamDisplayName,
   type PricingSourceSelection,
-  type PricingSourceSelections,
 } from './upstream-ratio-sync-helpers'
 import { UpstreamRatioSyncTable } from './upstream-ratio-sync-table'
 
@@ -77,9 +87,22 @@ function getDefaultEndpointForChannel(channel: UpstreamChannel): string {
   return DEFAULT_ENDPOINT
 }
 
+type SyncPreview = {
+  conflicts: ConflictItem[]
+  changes: ModelPricingChange[]
+  resolutions: Record<string, PricingSyncValues>
+  exchangeRateSummary?: string
+}
+
 export function UpstreamRatioSync() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const currencyConfig = useSystemConfigStore((state) => state.config.currency)
+  const currency = useMemo(
+    () => getSitePricingCurrency(currencyConfig),
+    [currencyConfig]
+  )
+  const rate = isValidPricingCurrency(currency) ? currency.exchangeRate : null
   const [pricingBaseline, setPricingBaseline] =
     useState<ModelPricingConfig | null>(null)
   const [channelDialogOpen, setChannelDialogOpen] = useState(false)
@@ -90,11 +113,30 @@ export function UpstreamRatioSync() {
   >({})
   const [differences, setDifferences] = useState<DifferencesMap>({})
   const [prices, setPrices] = useState<PricingSyncModels>({})
-  const [selectedSources, setSelectedSources] =
-    useState<PricingSourceSelections>({})
-  const [priceConversionRate, setPriceConversionRate] = useState('1')
-  const conversionRate = Number(priceConversionRate)
-  const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
+  const [selections, setSelections] = useState<
+    Record<string, { source: string; adjustment: PriceAdjustment }>
+  >({})
+  const selectedSources = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(selections).map(([model, entry]) => [
+          model,
+          entry.source,
+        ])
+      ),
+    [selections]
+  )
+  const adjustments = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(selections).map(([model, entry]) => [
+          model,
+          entry.adjustment,
+        ])
+      ),
+    [selections]
+  )
+  const [preview, setPreview] = useState<SyncPreview | null>(null)
   const [loadingBaseline, setLoadingBaseline] = useState(false)
   const { data: channelsData } = useQuery({
     queryKey: ['upstream-channels'],
@@ -112,23 +154,26 @@ export function UpstreamRatioSync() {
       return next
     })
   }, [channels])
-  const resolutions = useMemo(
+  const adjustedPrices = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(selectedSources).flatMap(([name, source]) => {
-          const values = prices[name]?.upstreams[source]
-          if (!values) return []
-          const converted = { ...values }
-          for (const field of ['model_ratio', 'model_price'] as const) {
-            if (typeof converted[field] === 'number') {
-              converted[field] /= conversionRate
-            }
-          }
-          return [[name, converted]]
-        })
-      ) as Record<string, Record<string, number | string>>,
-    [selectedSources, prices, conversionRate]
+        Object.entries(selections).map(([model, entry]) => [
+          model,
+          adjustSyncPrice(
+            prices[model]?.upstreams[entry.source] ?? {},
+            entry.adjustment,
+            rate
+          ),
+        ])
+      ),
+    [selections, prices, rate]
   )
+  const hasAdjustmentErrors = Object.values(adjustedPrices).some(
+    (result) => result.error
+  )
+  const adjustedCount = Object.values(selections).filter(
+    (entry) => entry.adjustment !== 'keep'
+  ).length
   const fetchMutation = useMutation({
     mutationFn: async (request: Parameters<typeof fetchUpstreamRatios>[0]) => {
       const response = await fetchUpstreamRatios(request)
@@ -154,7 +199,7 @@ export function UpstreamRatioSync() {
     onMutate: () => {
       setPrices({})
       setDifferences({})
-      setSelectedSources({})
+      setSelections({})
     },
     onSuccess: (response) => {
       const errors = response.data.test_results.filter(
@@ -182,16 +227,9 @@ export function UpstreamRatioSync() {
       handleServerError(error, t('Failed to fetch upstream prices')),
   })
   const syncMutation = useMutation({
-    mutationFn: async () => {
-      if (!pricingBaseline) throw new Error(t('Reload pricing'))
-      const after = applyPriceSyncSelections(
-        pricingBaseline.options,
-        resolutions
-      )
-      await saveModelPricing(
-        buildPricingChanges(pricingBaseline, pricingBaseline.options, after)
-      )
-      return resolutions
+    mutationFn: async (confirmed: SyncPreview) => {
+      await saveModelPricing(confirmed.changes)
+      return confirmed.resolutions
     },
     onSuccess: async (saved) => {
       setPrices((previous) =>
@@ -202,7 +240,7 @@ export function UpstreamRatioSync() {
           ])
         )
       )
-      setSelectedSources({})
+      setSelections({})
       setConflictDialogOpen(false)
       setPricingBaseline(null)
       toast.success(t('Prices synced successfully'))
@@ -236,11 +274,11 @@ export function UpstreamRatioSync() {
     setDifferences({})
     fetchMutation.reset()
     setPricingBaseline(null)
-    setSelectedSources({})
+    setSelections({})
     syncMutation.reset()
     try {
       setPricingBaseline(await getModelPricing())
-      fetchMutation.mutate({ upstreams, timeout: 10 })
+      fetchMutation.mutate({ upstreams, timeout: 10, include_unchanged: true })
     } catch (error) {
       handleServerError(error, t('Failed to load model pricing'))
     } finally {
@@ -248,63 +286,124 @@ export function UpstreamRatioSync() {
     }
   }
   const handleSelectPrices = useCallback(
-    (selections: PricingSourceSelection[]) => {
-      setSelectedSources((previous) =>
-        Object.fromEntries([
-          ...Object.entries(previous),
-          ...selections
-            .filter(
-              (selection) =>
-                prices[selection.model]?.upstreams[selection.source]
-            )
-            .map((selection) => [selection.model, selection.source]),
-        ])
-      )
+    (selected: PricingSourceSelection[]) => {
+      setSelections((previous) => {
+        const next = { ...previous }
+        for (const entry of selected) {
+          if (!prices[entry.model]?.upstreams[entry.source]) continue
+          if (next[entry.model]?.source === entry.source) continue
+          next[entry.model] = { source: entry.source, adjustment: 'keep' }
+        }
+        return next
+      })
     },
     [prices]
   )
   const handleUnselectPrices = useCallback((models: string[]) => {
-    setSelectedSources((previous) => {
+    setSelections((previous) => {
       const next = { ...previous }
-      for (const name of models) delete next[name]
+      for (const model of models) delete next[model]
       return next
     })
   }, [])
+  const handleAdjustPrices = useCallback(
+    (models: string[], adjustment: PriceAdjustment) => {
+      setSelections((previous) => {
+        const next = { ...previous }
+        for (const model of models) {
+          if (next[model]) next[model] = { ...next[model], adjustment }
+        }
+        return next
+      })
+    },
+    []
+  )
   const handleApplySync = () => {
-    if (
-      !Number.isFinite(conversionRate) ||
-      conversionRate <= 0 ||
-      Object.values(resolutions).some((values) =>
-        Object.values(values).some(
-          (value) => typeof value === 'number' && !Number.isFinite(value)
-        )
-      )
-    ) {
-      toast.error(t('Price conversion rate must be greater than 0'))
-      return
-    }
-    const previews: ConflictItem[] = Object.entries(selectedSources).flatMap(
-      ([model, source]) => {
-        const row = prices[model]
-        const selected: PricingSyncValues | undefined = resolutions[model]
-        if (!row || !selected) return []
-        return [
-          {
-            model,
-            channel: getUpstreamDisplayName(source, t),
-            current: describeSyncPrice(row.current, t),
-            newVal: describeSyncPrice(selected, t),
-          },
-        ]
+    if (!pricingBaseline || hasAdjustmentErrors) return
+    const resolutions: Record<string, PricingSyncValues> = {}
+    const conflicts: ConflictItem[] = []
+    for (const [model, entry] of Object.entries(selections)) {
+      const selected = adjustedPrices[model]?.values
+      const row = prices[model]
+      if (!row || !selected) return
+      resolutions[model] = selected
+      let adjustment = t('Keep source price')
+      if (entry.adjustment === 'divide') {
+        adjustment = t('Divide by exchange rate (÷ {{rate}})', {
+          rate: String(rate),
+        })
       }
-    )
-    setConflictItems(previews)
-    setConflictDialogOpen(true)
+      if (entry.adjustment === 'multiply') {
+        adjustment = t('Multiply by exchange rate (× {{rate}})', {
+          rate: String(rate),
+        })
+      }
+      conflicts.push({
+        model,
+        channel: getUpstreamDisplayName(entry.source, t),
+        current: describeSyncPrice(row.current, t),
+        newVal: describeSyncPrice(selected, t),
+        adjustment,
+        siteVal:
+          isValidPricingCurrency(currency) &&
+          (selected.billing_mode !== 'tiered_expr' ||
+            getSyncExpressionPricing(String(selected.billing_expr), t))
+            ? describeSyncPrice(selected, t, currency)
+            : undefined,
+      })
+    }
+    try {
+      const after = applyPriceSyncSelections(
+        pricingBaseline.options,
+        resolutions
+      )
+      // Freeze the exact save payload and its preview together. Changes to the
+      // site exchange rate while this dialog is open cannot change the charge.
+      setPreview({
+        conflicts,
+        resolutions,
+        changes: buildPricingChanges(
+          pricingBaseline,
+          pricingBaseline.options,
+          after
+        ),
+        exchangeRateSummary: isValidPricingCurrency(currency)
+          ? t('Current exchange rate: 1 USD = {{rate}} {{currency}}', {
+              rate: String(rate),
+              currency: currency.label,
+            })
+          : undefined,
+      })
+      syncMutation.reset()
+      setConflictDialogOpen(true)
+    } catch (error) {
+      handleServerError(error, t('Failed to sync prices'))
+    }
   }
   const isLoading =
     loadingBaseline || fetchMutation.isPending || syncMutation.isPending
+  const selectedModels = Object.keys(selections)
+  const batchAdjustmentDisabled =
+    isLoading || selectedModels.length === 0 || rate === null
   return (
     <div className='flex h-full min-h-0 flex-col gap-3'>
+      <div className='flex shrink-0 flex-wrap items-center gap-2'>
+        <PriceAdjustmentSelect
+          value={null}
+          currency={currency}
+          label={t('Set selected prices')}
+          disabled={isLoading || !Object.keys(selections).length}
+          onChange={(mode) => handleAdjustPrices(Object.keys(selections), mode)}
+        />
+        <span className='text-muted-foreground text-xs'>
+          {isValidPricingCurrency(currency)
+            ? t('Current exchange rate: 1 USD = {{rate}} {{currency}}', {
+                rate: String(rate),
+                currency: currency.label,
+              })
+            : t('A valid site exchange rate is required.')}
+        </span>
+      </div>
       <div className='min-h-0 flex-1'>
         {fetchMutation.isError ? (
           <ErrorState
@@ -335,36 +434,16 @@ export function UpstreamRatioSync() {
             prices={prices}
             differences={differences}
             selectedSources={selectedSources}
+            adjustments={adjustments}
+            adjustedPrices={adjustedPrices}
+            currency={currency}
+            onAdjustPrices={handleAdjustPrices}
             isDisabled={isLoading}
             isSyncing={fetchMutation.isPending || loadingBaseline}
             onSelectPrices={handleSelectPrices}
             onUnselectPrices={handleUnselectPrices}
           />
         )}
-      </div>
-      <div className='shrink-0 space-y-2'>
-        <Label htmlFor='price-conversion-rate'>
-          {t('Price conversion rate')}
-        </Label>
-        <Input
-          id='price-conversion-rate'
-          aria-describedby='price-conversion-rate-help'
-          type='number'
-          min='0'
-          step='any'
-          value={priceConversionRate}
-          onChange={(event) => setPriceConversionRate(event.target.value)}
-          disabled={isLoading || conflictDialogOpen}
-          className='max-w-xs'
-        />
-        <p
-          id='price-conversion-rate-help'
-          className='text-muted-foreground text-xs'
-        >
-          {t(
-            'When applying sync, divide selected absolute prices by this rate before saving. Example: if upstream prices are CNY and 1 USD = 7.3 CNY, enter 7.3 to save USD prices.'
-          )}
-        </p>
       </div>
       <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-t pt-3'>
         <div className='flex flex-wrap items-center gap-2'>
@@ -373,12 +452,53 @@ export function UpstreamRatioSync() {
               count: Object.keys(selectedSources).length,
             })}
           </span>
+          {adjustedCount > 0 && (
+            <span className='text-muted-foreground text-sm'>
+              {t('Exchange rate adjustments: {{count}}', {
+                count: adjustedCount,
+              })}
+            </span>
+          )}
+          <ButtonGroup aria-label={t('Set selected prices')}>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='tabular-nums'
+              disabled={batchAdjustmentDisabled}
+              aria-label={t('Multiply by exchange rate (× {{rate}})', {
+                rate: String(rate ?? '—'),
+              })}
+              title={t('Multiply by exchange rate (× {{rate}})', {
+                rate: String(rate ?? '—'),
+              })}
+              onClick={() => handleAdjustPrices(selectedModels, 'multiply')}
+            >
+              × {rate ?? '—'}
+            </Button>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='tabular-nums'
+              disabled={batchAdjustmentDisabled}
+              aria-label={t('Divide by exchange rate (÷ {{rate}})', {
+                rate: String(rate ?? '—'),
+              })}
+              title={t('Divide by exchange rate (÷ {{rate}})', {
+                rate: String(rate ?? '—'),
+              })}
+              onClick={() => handleAdjustPrices(selectedModels, 'divide')}
+            >
+              ÷ {rate ?? '—'}
+            </Button>
+          </ButtonGroup>
           {Object.keys(selectedSources).length > 0 && (
             <Button
               variant='ghost'
               size='sm'
               disabled={isLoading}
-              onClick={() => setSelectedSources({})}
+              onClick={() => setSelections({})}
             >
               {t('Clear selection')}
             </Button>
@@ -389,6 +509,7 @@ export function UpstreamRatioSync() {
           disabled={
             !pricingBaseline ||
             !Object.keys(selectedSources).length ||
+            hasAdjustmentErrors ||
             isLoading
           }
         >
@@ -411,13 +532,16 @@ export function UpstreamRatioSync() {
         onOpenChange={(open) => {
           if (!syncMutation.isPending) setConflictDialogOpen(open)
         }}
-        conflicts={conflictItems}
-        onConfirm={() => syncMutation.mutate()}
+        conflicts={preview?.conflicts ?? []}
+        exchangeRateSummary={preview?.exchangeRateSummary}
+        onConfirm={() => {
+          if (preview) syncMutation.mutate(preview)
+        }}
         isLoading={syncMutation.isPending}
         error={syncMutation.error?.message}
         onReload={() => {
           setConflictDialogOpen(false)
-          setSelectedSources({})
+          setSelections({})
           setPrices({})
           setDifferences({})
           setPricingBaseline(null)

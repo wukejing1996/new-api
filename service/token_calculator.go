@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -26,7 +26,7 @@ type CalculatorAmount struct {
 }
 
 func (a *CalculatorAmount) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
+	var fields map[string]common.RawMessage
 	if err := common.Unmarshal(data, &fields); err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (r CalculatorRequest) Validate() error {
 		if cache.Unit != "tokens" && cache.Unit != "percent" {
 			return errors.New("invalid_amount")
 		}
-		if cache.WriteTTL != "default" && cache.WriteTTL != "5m" && cache.WriteTTL != "1h" {
+		if cache.WriteTTL != "default" && cache.WriteTTL != "5m" && cache.WriteTTL != "1h" && cache.WriteTTL != "12h" {
 			return errors.New("invalid_amount")
 		}
 		for _, value := range []float64{cache.Read, cache.Write} {
@@ -136,7 +136,7 @@ func countCalculatorAmount(a CalculatorAmount, modelName string, input bool) Cal
 	if a.Type == "tokens" {
 		return CalculatorCount{Tokens: *a.Tokens, Source: "manual"}
 	}
-	plain := CountTextToken(*a.Text, modelName)
+	plain := CountTokenInput(*a.Text, modelName)
 	count := CalculatorCount{Tokens: plain, Source: "text_estimate", TextTokens: &plain}
 	if input {
 		// Match the gateway's single-user-message OpenAI-compatible request path.
@@ -144,7 +144,7 @@ func countCalculatorAmount(a CalculatorAmount, modelName string, input bool) Cal
 		meta := r.GetTokenCountMeta()
 		// This request has no names or tools. Keep the relay untouched; the parity
 		// test detects changes to its message-overhead rules when merging upstream.
-		count.Tokens = CountTextToken(meta.CombineText, modelName) + meta.MessagesCount*3 + 3
+		count.Tokens = CountTokenInput(meta.CombineText, modelName) + meta.MessagesCount*3 + 3
 		count.Source = "request_estimate"
 	}
 	return count
@@ -191,13 +191,19 @@ func EstimateCalculator(r CalculatorRequest, price model.Pricing, groupRatio flo
 		writeVar := "cc"
 		if r.Cache != nil && r.Cache.WriteTTL == "1h" {
 			writeVar = "cc1h"
+		} else if r.Cache != nil && r.Cache.WriteTTL == "12h" {
+			writeVar = "cc12h"
 		}
-		if (q.CacheRead > 0 && !vars["cr"]) || (q.CacheWrite > 0 && !vars[writeVar]) {
+		if (q.CacheRead > 0 && !vars["cr"]) || (q.CacheWrite > 0 && !vars[writeVar] && !(writeVar == "cc12h" && (vars["cc"] || vars["p"]))) {
 			return nil, errors.New("cache_unavailable")
 		}
 		usage := &dto.Usage{PromptTokens: q.Input.Tokens, CompletionTokens: q.Output.Tokens, UsageSemantic: "anthropic"}
 		usage.PromptTokensDetails.CachedTokens = q.CacheRead
-		if writeVar == "cc1h" {
+		if writeVar == "cc12h" {
+			usage.UsageSemantic = "openai"
+			usage.PromptTokensDetails.CacheWriteTokens = q.CacheWrite
+			usage.PromptTokensDetails.CacheWriteTokensDetails = &dto.CacheWriteTokenDetails{TTL12hTokens: q.CacheWrite}
+		} else if writeVar == "cc1h" {
 			usage.ClaudeCacheCreation1hTokens = q.CacheWrite
 		} else {
 			usage.ClaudeCacheCreation5mTokens = q.CacheWrite
@@ -229,7 +235,12 @@ func EstimateCalculator(r CalculatorRequest, price model.Pricing, groupRatio flo
 			writeRatio = *price.CreateCacheRatio
 		}
 		if r.Cache != nil && r.Cache.WriteTTL != "default" {
-			if !strings.Contains(strings.ToLower(r.Model), "claude") {
+			if r.Cache.WriteTTL == "12h" {
+				if !strings.Contains(strings.ToLower(r.Model), "gpt") {
+					return nil, errors.New("cache_unavailable")
+				}
+				writeRatio *= hosttypes.OpenAICacheCreation12hMultiplier
+			} else if !strings.Contains(strings.ToLower(r.Model), "claude") {
 				return nil, errors.New("cache_unavailable")
 			}
 			if r.Cache.WriteTTL == "1h" {

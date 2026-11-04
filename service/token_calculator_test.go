@@ -35,7 +35,6 @@ func TestCalculatorAmountContract(t *testing.T) {
 }
 
 func TestCalculatorQuoteScenarios(t *testing.T) {
-	InitTokenEncoders()
 	oldQuota, oldCount := common.QuotaPerUnit, constant.CountToken
 	common.QuotaPerUnit, constant.CountToken = 500000, false
 	t.Cleanup(func() { common.QuotaPerUnit, constant.CountToken = oldQuota, oldCount })
@@ -109,6 +108,30 @@ func TestCalculatorTierAndCacheTTL(t *testing.T) {
 		_, err := EstimateCalculator(r, price, 1)
 		assert.Error(t, err)
 	}
+}
+
+func TestCalculatorOpenAI12hCache(t *testing.T) {
+	input, output := 1000, 100
+	r := CalculatorRequest{Model: "gpt-test", Group: "default", Input: CalculatorAmount{Type: "tokens", Tokens: &input}, Output: CalculatorAmount{Type: "tokens", Tokens: &output}, RequestCount: 1, Cache: &CalculatorCache{Unit: "tokens", Write: 200, WriteTTL: "12h"}}
+	for _, tc := range []struct {
+		expr string
+		want float64
+	}{
+		{`tier("base", p*2+c*8+cc*3+cc12h*7)`, 0.0038},
+		{`tier("base", p*2+c*8+cc*3)`, 0.0036},
+		{`tier("base", p*2+c*8)`, 0.0032},
+	} {
+		quote, err := EstimateCalculator(r, model.Pricing{BillingMode: "tiered_expr", BillingExpr: tc.expr}, 1)
+		require.NoError(t, err)
+		assert.InDelta(t, tc.want, quote.Baseline, 1e-12)
+	}
+	oldQuota := common.QuotaPerUnit
+	common.QuotaPerUnit = 500000
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuota })
+	ratio := 1.5
+	quote, err := EstimateCalculator(r, model.Pricing{ModelRatio: 1, CompletionRatio: 4, CreateCacheRatio: &ratio}, 1)
+	require.NoError(t, err)
+	assert.InDelta(t, 0.0036, quote.Baseline, 1e-12)
 }
 
 func TestCalculatorRejectsUnsafeUsage(t *testing.T) {

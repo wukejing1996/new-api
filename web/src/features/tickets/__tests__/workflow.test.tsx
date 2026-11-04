@@ -72,7 +72,7 @@ afterEach(() => {
 })
 
 test('filtering the admin queue uses admin endpoints and opening a ticket refreshes unread counts', async () => {
-  const requests: { url: string; params?: Record<string, unknown> }[] = []
+  const requests: { url: string; params?: unknown }[] = []
   vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
     requests.push({ url, params: config?.params })
     if (url.endsWith('/counts')) {
@@ -91,9 +91,15 @@ test('filtering the admin queue uses admin endpoints and opening a ticket refres
     target: { value: 'unread' },
   })
   await waitFor(() =>
-    expect(requests.some((request) => request.params?.unread === true)).toBe(
-      true
-    )
+    expect(
+      requests.some(
+        (request) =>
+          typeof request.params === 'object' &&
+          request.params !== null &&
+          'unread' in request.params &&
+          request.params.unread === true
+      )
+    ).toBe(true)
   )
   await userEvent.click(screen.getByRole('button', { name: ticket.subject }))
   await screen.findByRole('log', { name: 'Conversation' })
