@@ -167,6 +167,7 @@ func InitOptionMap() {
 	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
 	common.OptionMap[setting.UserGroupRateLimitOptionKey] = setting.UserGroupRateLimitConfigJSON()
 	common.OptionMap[setting.RegistrationRiskOptionKey] = setting.RegistrationRiskConfigJSON()
+	common.OptionMap[setting.RegistrationPartnerOptionKey] = "[]"
 	common.OptionMap[setting.RegistrationRiskAPIKeyOptionKey] = ""
 	common.OptionMap[setting.RegistrationRiskIPAPIKeyOptionKey] = ""
 	common.OptionMap[setting.RegistrationRiskVPNAPIKeyOptionKey] = ""
@@ -249,6 +250,10 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == setting.RegistrationPartnerOptionKey {
+		_, err := setting.ParseRegistrationPartnerMappings(value)
+		return err
+	}
 	if key == setting.RegistrationRiskIPAPIKeyOptionKey || key == setting.RegistrationRiskVPNAPIKeyOptionKey {
 		return setting.ValidateRegistrationRiskProviderKey(value)
 	}

@@ -45,6 +45,8 @@ vi.mock('@/lib/api', () => ({
 }))
 
 const endpoint = '/api/option/registration_risk'
+const partnerEndpoint = '/api/option/registration_partners'
+const partnerScope = 'registration.partners.update'
 let settings: RegistrationRiskSettings
 
 function fixture(
@@ -95,9 +97,32 @@ beforeEach(() => {
     let data: unknown = ['default', 'High Risk']
     if (path === endpoint) data = settings
     if (path === `${endpoint}/records`) data = { items: [], total: 0 }
+    if (path === partnerEndpoint) data = []
+    if (path === '/api/verify/methods') {
+      data = {
+        scope: partnerScope,
+        methods: [{ method: '2fa', available: true }],
+        oauth_providers: [],
+        password_encryption_enabled: false,
+      }
+    }
     return { data: { success: true, data } }
   })
-  vi.mocked(api.put).mockImplementation(async (_path, body) => {
+  vi.mocked(api.put).mockImplementation(async (path, body) => {
+    if (path === partnerEndpoint) {
+      const { mappings } = body as {
+        mappings: { code: string; group: string }[]
+      }
+      return {
+        data: {
+          success: true,
+          data: mappings.map((mapping) => ({
+            ...mapping,
+            link: `https://frontend.example/en/register?partner=${mapping.code}`,
+          })),
+        },
+      }
+    }
     settings = {
       ...settings,
       config: (body as { config: RegistrationRiskSettings['config'] }).config,
@@ -107,6 +132,45 @@ beforeEach(() => {
 })
 
 describe('registration risk settings', () => {
+  it('shows the fixed partner registration link after verified save', async () => {
+    const user = userEvent.setup()
+    const code = 'partner-test-code-123'
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: {
+          proof_token: 'partner-proof',
+          method: '2fa',
+          scope: partnerScope,
+          expires_at: Math.floor(Date.now() / 1000) + 60,
+        },
+      },
+    })
+    fixture()
+    await user.click(await screen.findByRole('button', { name: /^Add$/ }))
+    const section = within(
+      screen.getByRole('form', { name: 'Partner registration links' })
+    )
+    await user.selectOptions(section.getByLabelText('User group'), 'default')
+    await user.type(section.getByLabelText('Partner code'), code)
+    expect(section.queryByLabelText('Registration URL')).not.toBeInTheDocument()
+    await user.click(section.getByRole('button', { name: 'Save changes' }))
+    await user.type(
+      await screen.findByLabelText('Authenticator code or backup code'),
+      '123456'
+    )
+    await user.click(screen.getByRole('button', { name: 'Verify' }))
+    const link = `https://frontend.example/en/register?partner=${code}`
+    expect(await section.findByLabelText('Registration URL')).toHaveValue(link)
+    expect(api.put).toHaveBeenCalledWith(
+      partnerEndpoint,
+      { mappings: [{ code, group: 'default' }] },
+      { headers: { 'X-Security-Proof': 'partner-proof' } }
+    )
+    await user.click(section.getByRole('button', { name: 'Copy Link' }))
+    expect(await navigator.clipboard.readText()).toBe(link)
+  })
+
   it('keeps every provider switch and credential inside its named settings group', async () => {
     fixture()
     await screen.findByLabelText('proxycheck.io API key')

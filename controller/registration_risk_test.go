@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -676,6 +677,109 @@ func TestRegistrationRiskSettings(t *testing.T) {
 			assert.Equal(t, "High Risk", loaded.TargetGroup)
 		})
 	}
+}
+
+func TestRegistrationPartnerRegistration(t *testing.T) {
+	_, cfg := setupRegistrationRisk(t, true)
+	cfg.IPRule.Enabled, cfg.IPRule.TriggerCount = true, 2
+	setRegistrationRiskConfig(t, cfg)
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"High Risk":1,"Partner":0.9}`))
+	const code = "partner-test-code-123"
+	require.NoError(t, model.UpdateOptionsBulk(map[string]string{
+		setting.RegistrationPartnerOptionKey: `[{"code":"` + code + `","group":"Partner"},{"code":"deleted-group-code","group":"Deleted"}]`,
+	}))
+	previousRegister, previousPassword, previousEmail, previousDefaultToken := common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken
+	common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = true, true, true, false
+	t.Cleanup(func() {
+		common.RegisterEnabled, common.PasswordRegisterEnabled, common.EmailVerificationEnabled, constant.GenerateDefaultToken = previousRegister, previousPassword, previousEmail, previousDefaultToken
+	})
+	var calls atomic.Int32
+	mockRegistrationIntelligence(t, safeRegistrationIP, `{"detections":{"disposable":false}}`, &calls)
+	register := func(username, partner, verificationCode string) string {
+		t.Helper()
+		email := username + "@example.com"
+		common.RegisterVerificationCodeWithKey(email, "123456", common.EmailVerificationPurpose)
+		t.Cleanup(func() { common.DeleteKey(email, common.EmailVerificationPurpose) })
+		body, err := common.Marshal(map[string]string{"username": username, "password": "Password123!", "email": email, "partner": partner, "verification_code": verificationCode})
+		require.NoError(t, err)
+		ctx, response := registrationRiskContext("8.8.4.4")
+		ctx.Request.Body = io.NopCloser(strings.NewReader(string(body)))
+		Register(ctx)
+		return response.Body.String()
+	}
+	assert.Contains(t, register("bad-code", code, "999999"), `"success":false`)
+	require.Contains(t, register("partner-one", code, "123456"), `"success":true`)
+	require.Contains(t, register("partner-two", code, "123456"), `"success":true`)
+	assert.Zero(t, calls.Load())
+	for _, username := range []string{"partner-one", "partner-two"} {
+		var user model.User
+		require.NoError(t, model.DB.Where("username = ?", username).First(&user).Error)
+		assert.Equal(t, "Partner", user.Group)
+	}
+	var audit model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", "CostRouter.registration_partner.register").Last(&audit).Error)
+	auditJSON, err := common.Marshal(audit)
+	require.NoError(t, err)
+	assert.NotContains(t, string(auditJSON), code)
+
+	require.Contains(t, register("ordinary", "", "123456"), `"success":true`)
+	var ordinary model.User
+	require.NoError(t, model.DB.Where("username = ?", "ordinary").First(&ordinary).Error)
+	assert.Equal(t, "default", ordinary.Group)
+	require.Contains(t, register("unknown", "unknown-partner-code", "123456"), `"success":true`)
+	require.Contains(t, register("deleted", "deleted-group-code", "123456"), `"success":true`)
+	assert.Positive(t, calls.Load())
+	for username, group := range map[string]string{"ordinary": "High Risk", "unknown": "High Risk", "deleted": "High Risk", "partner-one": "Partner", "partner-two": "Partner"} {
+		var user model.User
+		require.NoError(t, model.DB.Where("username = ?", username).First(&user).Error)
+		assert.Equal(t, group, user.Group, username)
+	}
+}
+
+func TestRegistrationPartnerSettings(t *testing.T) {
+	user, identity := setupSecurityEnrollmentTest(t)
+	previousOptions, previousAddress, previousRatios := common.OptionMap, system_setting.ServerAddress, ratio_setting.GroupRatio2JSONString()
+	previousPassword := common.PasswordLoginEnabled
+	common.OptionMap, system_setting.ServerAddress, common.PasswordLoginEnabled = map[string]string{}, "https://frontend.example", true
+	t.Cleanup(func() {
+		common.OptionMap, system_setting.ServerAddress, common.PasswordLoginEnabled = previousOptions, previousAddress, previousPassword
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
+	})
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"Partner":0.9}`))
+	const code = "partner-test-code-123"
+	path := "/api/option/registration_partners"
+	body := `{"mappings":[{"code":"` + code + `","group":"Partner"}]}`
+	operation := service.VerificationOperation{Scope: service.VerificationScopeRegistrationPartners}
+	_, err := service.GetVerificationRequirements(identity, operation.Scope)
+	require.ErrorIs(t, err, service.ErrVerificationForbidden)
+	require.NoError(t, model.DB.Model(user).Update("role", common.RoleRootUser).Error)
+	require.NoError(t, model.PublishUserAuthCache(user.Id))
+	response := securityEnrollmentRequest(http.MethodGet, path, "", "", service.AuthIdentity{}, GetRegistrationPartnerMappings)
+	require.Equal(t, http.StatusForbidden, response.Code)
+	response = securityEnrollmentRequest(http.MethodPut, path, body, "", identity, UpdateRegistrationPartnerMappings)
+	require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), "SECURITY_PROOF_REQUIRED")
+	for _, badBody := range []string{
+		strings.Replace(body, `"Partner"`, `"Deleted"`, 1),
+		strings.Replace(body, `}]`, `},{"code":"`+code+`","group":"default"}]`, 1),
+	} {
+		response = securityEnrollmentRequest(http.MethodPut, path, badBody, "", identity, UpdateRegistrationPartnerMappings)
+		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	}
+	proof := issueSecurityEnrollmentProof(t, identity, operation, service.VerificationMethodPassword)
+	response = securityEnrollmentRequest(http.MethodPut, path, body, proof, identity, UpdateRegistrationPartnerMappings)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Contains(t, response.Body.String(), `https://frontend.example/en/register?partner=`+code)
+	assert.Equal(t, "Partner", setting.GetRegistrationPartnerGroup(code))
+	response = securityEnrollmentRequest(http.MethodGet, "/api/option", "", "", identity, GetOptions)
+	assert.NotContains(t, response.Body.String(), code)
+	response = securityEnrollmentRequest(http.MethodPut, path, `{"mappings":[]}`, proof, identity, UpdateRegistrationPartnerMappings)
+	assert.Equal(t, http.StatusForbidden, response.Code)
+	assert.Contains(t, response.Body.String(), "SECURITY_PROOF_CONSUMED")
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1}`))
+	response = securityEnrollmentRequest(http.MethodGet, path, "", "", identity, GetRegistrationPartnerMappings)
+	assert.Contains(t, response.Body.String(), `"link":""`)
+	assert.Empty(t, setting.GetRegistrationPartnerGroup(code))
 }
 
 func TestRegistrationRiskRegistrationPaths(t *testing.T) {

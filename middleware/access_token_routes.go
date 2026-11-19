@@ -52,6 +52,8 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/option/registration_risk/records":     accessTokenScopeRule("option:read"),
 	"PUT /api/option/registration_risk":             accessTokenScopeRule("option:write"),
 	"POST /api/option/registration_risk/test":       accessTokenSessionRule,
+	"GET /api/option/registration_partners":         accessTokenSessionRule,
+	"PUT /api/option/registration_partners":         accessTokenSessionRule,
 	"GET /api/option/user_group_rate_limit/stats":   accessTokenScopeRule("option:read"),
 	"GET /api/hot-models/":                          accessTokenScopeRule("option:read"),
 	"PUT /api/hot-models/":                          accessTokenScopeRule("option:write"),

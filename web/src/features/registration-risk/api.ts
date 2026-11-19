@@ -29,6 +29,28 @@ import {
 
 type Envelope<T> = { success: boolean; message: string; data: T }
 const endpoint = '/api/option/registration_risk'
+const partnerEndpoint = '/api/option/registration_partners'
+
+export type RegistrationPartnerMapping = { code: string; group: string }
+type RegistrationPartnerEntry = RegistrationPartnerMapping & { link: string }
+
+export async function getRegistrationPartnerMappings() {
+  const response =
+    await api.get<Envelope<RegistrationPartnerEntry[]>>(partnerEndpoint)
+  return requireServerSuccess(response.data).data
+}
+
+export async function saveRegistrationPartnerMappings(
+  mappings: RegistrationPartnerMapping[],
+  proofToken: string
+) {
+  const response = await api.put<Envelope<RegistrationPartnerEntry[]>>(
+    partnerEndpoint,
+    { mappings },
+    { headers: { 'X-Security-Proof': proofToken } }
+  )
+  return requireServerSuccess(response.data).data
+}
 
 export async function getRegistrationRiskRecords(params: RiskRecordFilters) {
   const response = await api.get<Envelope<{ items: RiskLog[]; total: number }>>(

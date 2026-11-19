@@ -53,6 +53,7 @@ import {
   getRegistrationRiskSettings,
   saveRegistrationRiskSettings,
 } from './api'
+import { RegistrationPartners } from './components/registration-partners'
 import { RiskNumber, RiskSwitch } from './components/risk-fields'
 import { RiskProviders } from './components/risk-providers'
 import { RiskQueryTest } from './components/risk-query-test'
@@ -367,6 +368,7 @@ export function RegistrationRisk() {
           </SettingsForm>
         </Form>
         <RiskQueryTest configured={testConfigured} />
+        <RegistrationPartners groups={groups.data?.data} />
         <RiskRecords />
       </>
     )

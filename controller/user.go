@@ -223,12 +223,16 @@ func Register(c *gin.Context) {
 		common.ApiErrorT(c, "Password registration has been disabled by administrator, please use third-party account verification")
 		return
 	}
-	var user model.User
-	err := common.DecodeJson(c.Request.Body, &user)
+	var request struct {
+		model.User
+		Partner string `json:"partner"`
+	}
+	err := common.DecodeJson(c.Request.Body, &request)
 	if err != nil {
 		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
+	user := request.User
 	user.Username = strings.TrimSpace(user.Username)
 	user.Email = model.NormalizeEmail(user.Email)
 	if user.Username == "" {
@@ -283,7 +287,15 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := service.CreateUserWithRegistrationRisk(c, &cleanUser, func() error { return cleanUser.Insert(inviterId) }); err != nil {
+	partnerGroup := setting.GetRegistrationPartnerGroup(request.Partner)
+	create := func() error { return cleanUser.Insert(inviterId) }
+	if partnerGroup != "" {
+		cleanUser.Group = partnerGroup
+		err = create()
+	} else {
+		err = service.CreateUserWithRegistrationRisk(c, &cleanUser, create)
+	}
+	if err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorT(c, "Email address is already in use")
 			return
@@ -292,6 +304,9 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	if partnerGroup != "" {
+		recordUserSecurityAudit(c, cleanUser.Id, "CostRouter.registration_partner.register", map[string]any{"group": partnerGroup})
+	}
 	service.QueueNewUserRegistrationNotification(&cleanUser, "password", c.ClientIP())
 	// 获取插入后的用户ID
 	var insertedUser model.User
