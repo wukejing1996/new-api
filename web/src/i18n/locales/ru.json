@@ -5821,7 +5821,7 @@
     "Settings saved": "Настройки сохранены",
     "Partner registration links": "Партнёрские ссылки для регистрации",
     "Anyone with the link can reuse it to join the selected group and skip registration risk checks. Share it privately.": "Любой, у кого есть ссылка, может использовать её повторно для регистрации в выбранной группе без проверки рисков. Передавайте ссылку в частном порядке.",
-    "Partner codes must use 16-128 letters, digits, hyphens or underscores": "Партнёрский код должен содержать 16–128 латинских букв, цифр, дефисов или знаков подчёркивания",
+    "Partner code is required": "Укажите партнёрский код",
     "Partner registration codes must be unique": "Партнёрские коды регистрации должны быть уникальными",
     "Select an existing user group": "Выберите существующую группу пользователей",
     "Partner code": "Партнёрский код",

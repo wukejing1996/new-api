@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -684,7 +685,7 @@ func TestRegistrationPartnerRegistration(t *testing.T) {
 	cfg.IPRule.Enabled, cfg.IPRule.TriggerCount = true, 2
 	setRegistrationRiskConfig(t, cfg)
 	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"High Risk":1,"Partner":0.9}`))
-	const code = "partner-test-code-123"
+	const code = "Partner9"
 	require.NoError(t, model.UpdateOptionsBulk(map[string]string{
 		setting.RegistrationPartnerOptionKey: `[{"code":"` + code + `","group":"Partner"},{"code":"deleted-group-code","group":"Deleted"}]`,
 	}))
@@ -746,7 +747,7 @@ func TestRegistrationPartnerSettings(t *testing.T) {
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousRatios))
 	})
 	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"Partner":0.9}`))
-	const code = "partner-test-code-123"
+	const code = "合作方+1&2"
 	path := "/api/option/registration_partners"
 	body := `{"mappings":[{"code":"` + code + `","group":"Partner"}]}`
 	operation := service.VerificationOperation{Scope: service.VerificationScopeRegistrationPartners}
@@ -760,6 +761,8 @@ func TestRegistrationPartnerSettings(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
 	require.Contains(t, response.Body.String(), "SECURITY_PROOF_REQUIRED")
 	for _, badBody := range []string{
+		strings.Replace(body, code, "", 1),
+		strings.Replace(body, code, "   ", 1),
 		strings.Replace(body, `"Partner"`, `"Deleted"`, 1),
 		strings.Replace(body, `}]`, `},{"code":"`+code+`","group":"default"}]`, 1),
 	} {
@@ -769,10 +772,20 @@ func TestRegistrationPartnerSettings(t *testing.T) {
 	proof := issueSecurityEnrollmentProof(t, identity, operation, service.VerificationMethodPassword)
 	response = securityEnrollmentRequest(http.MethodPut, path, body, proof, identity, UpdateRegistrationPartnerMappings)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	assert.Contains(t, response.Body.String(), `https://frontend.example/en/register?partner=`+code)
+	var result struct {
+		Data []registrationPartnerEntry `json:"data"`
+	}
+	require.NoError(t, common.UnmarshalJsonStr(response.Body.String(), &result))
+	require.Len(t, result.Data, 1)
+	link, err := url.Parse(result.Data[0].Link)
+	require.NoError(t, err)
+	assert.Equal(t, "https", link.Scheme)
+	assert.Equal(t, "frontend.example", link.Host)
+	assert.Equal(t, "/en/register", link.Path)
+	assert.Equal(t, code, link.Query().Get("partner"))
 	assert.Equal(t, "Partner", setting.GetRegistrationPartnerGroup(code))
 	response = securityEnrollmentRequest(http.MethodGet, "/api/option", "", "", identity, GetOptions)
-	assert.NotContains(t, response.Body.String(), code)
+	assert.NotContains(t, response.Body.String(), setting.RegistrationPartnerOptionKey)
 	response = securityEnrollmentRequest(http.MethodPut, path, `{"mappings":[]}`, proof, identity, UpdateRegistrationPartnerMappings)
 	assert.Equal(t, http.StatusForbidden, response.Code)
 	assert.Contains(t, response.Body.String(), "SECURITY_PROOF_CONSUMED")

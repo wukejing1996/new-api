@@ -1,7 +1,6 @@
 package setting
 
 import (
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -16,8 +15,6 @@ type RegistrationPartnerMapping struct {
 	Group string `json:"group"`
 }
 
-var registrationPartnerCodePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
-
 func ParseRegistrationPartnerMappings(raw string) ([]RegistrationPartnerMapping, error) {
 	mappings := []RegistrationPartnerMapping{}
 	if err := common.UnmarshalJsonStr(raw, &mappings); err != nil || mappings == nil || len(mappings) > 100 {
@@ -25,8 +22,8 @@ func ParseRegistrationPartnerMappings(raw string) ([]RegistrationPartnerMapping,
 	}
 	codes := make(map[string]struct{}, len(mappings))
 	for _, mapping := range mappings {
-		if !registrationPartnerCodePattern.MatchString(mapping.Code) {
-			return nil, common.NewMessage("Partner codes must use 16-128 letters, digits, hyphens or underscores")
+		if strings.TrimSpace(mapping.Code) == "" {
+			return nil, common.NewMessage("Partner code is required")
 		}
 		if _, exists := codes[mapping.Code]; exists {
 			return nil, common.NewMessage("Partner registration codes must be unique")
@@ -51,7 +48,7 @@ func GetRegistrationPartnerMappings() []RegistrationPartnerMapping {
 }
 
 func GetRegistrationPartnerGroup(code string) string {
-	if !registrationPartnerCodePattern.MatchString(code) {
+	if code == "" {
 		return ""
 	}
 	for _, mapping := range GetRegistrationPartnerMappings() {

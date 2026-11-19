@@ -5821,7 +5821,7 @@
     "Settings saved": "Paramètres enregistrés",
     "Partner registration links": "Liens d’inscription partenaires",
     "Anyone with the link can reuse it to join the selected group and skip registration risk checks. Share it privately.": "Toute personne disposant du lien peut le réutiliser pour rejoindre le groupe choisi sans contrôle des risques à l’inscription. Partagez-le en privé.",
-    "Partner codes must use 16-128 letters, digits, hyphens or underscores": "Les codes partenaires doivent contenir de 16 à 128 lettres ASCII, chiffres, tirets ou tirets bas",
+    "Partner code is required": "Le code partenaire est requis",
     "Partner registration codes must be unique": "Les codes d’inscription partenaires doivent être uniques",
     "Select an existing user group": "Sélectionnez un groupe d’utilisateurs existant",
     "Partner code": "Code partenaire",

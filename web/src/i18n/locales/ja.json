@@ -5821,7 +5821,7 @@
     "Settings saved": "設定を保存しました",
     "Partner registration links": "パートナー向け登録リンク",
     "Anyone with the link can reuse it to join the selected group and skip registration risk checks. Share it privately.": "リンクを知っている人は、登録時のリスクチェックを省略して指定グループに登録できます。リンクは繰り返し使えるため、非公開で共有してください。",
-    "Partner codes must use 16-128 letters, digits, hyphens or underscores": "パートナーコードには半角英数字、ハイフン、アンダースコアを16～128文字使用してください",
+    "Partner code is required": "パートナーコードを入力してください",
     "Partner registration codes must be unique": "パートナー登録コードの重複は許可されません",
     "Select an existing user group": "既存のユーザーグループを選択してください",
     "Partner code": "パートナーコード",

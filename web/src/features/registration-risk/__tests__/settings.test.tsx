@@ -118,7 +118,7 @@ beforeEach(() => {
           success: true,
           data: mappings.map((mapping) => ({
             ...mapping,
-            link: `https://frontend.example/en/register?partner=${mapping.code}`,
+            link: `https://frontend.example/en/register?partner=${encodeURIComponent(mapping.code)}`,
           })),
         },
       }
@@ -134,7 +134,7 @@ beforeEach(() => {
 describe('registration risk settings', () => {
   it('shows the fixed partner registration link after verified save', async () => {
     const user = userEvent.setup()
-    const code = 'partner-test-code-123'
+    const code = '合作方+1&2'
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         success: true,
@@ -152,15 +152,20 @@ describe('registration risk settings', () => {
       screen.getByRole('form', { name: 'Partner registration links' })
     )
     await user.selectOptions(section.getByLabelText('User group'), 'default')
-    await user.type(section.getByLabelText('Partner code'), code)
+    const codeInput = section.getByRole('textbox', { name: 'Partner code' })
+    const saveButton = section.getByRole('button', { name: 'Save changes' })
+    expect(saveButton).toBeDisabled()
+    await user.type(codeInput, code)
+    expect(codeInput).toHaveValue(code)
+    expect(saveButton).toBeEnabled()
     expect(section.queryByLabelText('Registration URL')).not.toBeInTheDocument()
-    await user.click(section.getByRole('button', { name: 'Save changes' }))
+    await user.click(saveButton)
     await user.type(
       await screen.findByLabelText('Authenticator code or backup code'),
       '123456'
     )
     await user.click(screen.getByRole('button', { name: 'Verify' }))
-    const link = `https://frontend.example/en/register?partner=${code}`
+    const link = `https://frontend.example/en/register?partner=${encodeURIComponent(code)}`
     expect(await section.findByLabelText('Registration URL')).toHaveValue(link)
     expect(api.put).toHaveBeenCalledWith(
       partnerEndpoint,

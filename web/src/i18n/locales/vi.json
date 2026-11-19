@@ -5821,7 +5821,7 @@
     "Settings saved": "Đã lưu cài đặt",
     "Partner registration links": "Liên kết đăng ký đối tác",
     "Anyone with the link can reuse it to join the selected group and skip registration risk checks. Share it privately.": "Bất kỳ ai có liên kết đều có thể dùng lại để đăng ký vào nhóm đã chọn và bỏ qua kiểm tra rủi ro khi đăng ký. Hãy chia sẻ riêng tư.",
-    "Partner codes must use 16-128 letters, digits, hyphens or underscores": "Mã đối tác phải có 16–128 ký tự gồm chữ cái ASCII, chữ số, dấu gạch nối hoặc dấu gạch dưới",
+    "Partner code is required": "Vui lòng nhập mã đối tác",
     "Partner registration codes must be unique": "Mã đăng ký đối tác không được trùng nhau",
     "Select an existing user group": "Chọn một nhóm người dùng hiện có",
     "Partner code": "Mã đối tác",

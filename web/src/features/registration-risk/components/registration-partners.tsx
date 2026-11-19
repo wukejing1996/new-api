@@ -61,7 +61,7 @@ export function RegistrationPartners({ groups }: { groups?: string[] }) {
   const valid =
     rows.every(
       ({ code, group }) =>
-        /^[A-Za-z0-9_-]{16,128}$/.test(code) && availableGroups?.includes(group)
+        code.trim().length > 0 && availableGroups?.includes(group)
     ) && new Set(rows.map(({ code }) => code)).size === rows.length
   const saving = save.isPending || verification.isActive
 
@@ -107,10 +107,7 @@ export function RegistrationPartners({ groups }: { groups?: string[] }) {
           }}
         >
           <p className='text-muted-foreground text-sm'>
-            {t(
-              'Partner codes must use 16-128 letters, digits, hyphens or underscores'
-            )}
-            . {t('Partner registration codes must be unique')}.
+            {t('Partner registration codes must be unique')}.
           </p>
           {rows.map(({ id, code, group }) => {
             const saved = mappings.data?.find(
@@ -164,12 +161,10 @@ export function RegistrationPartners({ groups }: { groups?: string[] }) {
                   {t('Partner code')}
                   <Input
                     id={`${fieldPrefix}-code-${id}`}
-                    type='password'
+                    type='text'
                     autoComplete='off'
                     value={code}
-                    maxLength={128}
                     required
-                    pattern={String.raw`[A-Za-z0-9_\-]{16,128}`}
                     disabled={saving}
                     onChange={(event) =>
                       updateRow(id, { code: event.target.value })

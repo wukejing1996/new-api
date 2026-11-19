@@ -5821,7 +5821,7 @@
     "Settings saved": "設定已儲存",
     "Partner registration links": "合作夥伴註冊連結",
     "Anyone with the link can reuse it to join the selected group and skip registration risk checks. Share it privately.": "持有連結的人可重複使用連結，註冊後加入指定群組並略過註冊風險檢查。請私下分享。",
-    "Partner codes must use 16-128 letters, digits, hyphens or underscores": "合作碼須為 16–128 個英文字母、數字、連字號或底線",
+    "Partner code is required": "請填寫合作碼",
     "Partner registration codes must be unique": "合作夥伴註冊碼不得重複",
     "Select an existing user group": "請選擇現有的使用者群組",
     "Partner code": "合作夥伴代碼",
