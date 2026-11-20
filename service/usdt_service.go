@@ -161,7 +161,7 @@ func CheckUsdtOrder(ctx context.Context, order *model.TopUp) error {
 		}
 	}
 	if order.UsdtNetwork == "BSC" {
-		return CheckBscUsdtOrder(ctx, order)
+		return errors.New("BSC payments require a transaction hash")
 	}
 	return reconcileTrc20Orders(ctx, []*model.TopUp{order}, time.Now().UnixMilli())
 }

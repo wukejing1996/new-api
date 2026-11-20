@@ -2,7 +2,6 @@ package model
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -72,6 +71,7 @@ var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
+	ErrUsdtOrderExpired      = errors.New("USDT order expired")
 	// The quota errors reach the web console, so they carry message keys.
 	ErrInvalidTopUpQuota        error = common.NewMessage("Invalid top-up quota")
 	ErrTopUpQuotaLimitExceeded  error = common.NewMessage("Top-up quota limit exceeded")
@@ -896,12 +896,11 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 		order.UsdtNetwork = "TRC20"
 	}
 	if order.UsdtNetwork == "BSC" {
-		if !setting.ValidBscAddress(order.UsdtAddress) || order.UsdtStartBlock <= 0 {
+		if !setting.ValidBscAddress(order.UsdtAddress) {
 			return nil, errors.New("invalid BSC order snapshot")
 		}
 		order.UsdtAddress = strings.ToLower(order.UsdtAddress)
 		order.UsdtContract, order.UsdtDecimals = setting.BscUsdtContract, 18
-		order.UsdtScanBlock = order.UsdtStartBlock
 	} else if order.UsdtNetwork == "TRC20" {
 		order.UsdtContract, order.UsdtDecimals = setting.TronUsdtContract, 6
 	} else {
@@ -916,12 +915,9 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 		return nil, err
 	}
 	for attempt := range 500 {
-		micros := order.Amount*1000000 + ((start.Int64()+int64(attempt))%500+1)*1000
-		key := fmt.Sprintf("%s:%d", order.UsdtAddress, micros)
-		if order.UsdtNetwork == "BSC" {
-			digest := sha256.Sum256([]byte(fmt.Sprintf("56:%s:%s:%d", order.UsdtContract, order.UsdtAddress, micros)))
-			key = fmt.Sprintf("bsc:%x", digest)
-		}
+		suffix := (start.Int64()+int64(attempt))%500 + 1
+		micros := order.Amount*1000000 + suffix*1000
+		key := fmt.Sprintf("usdt-suffix:%03d", suffix)
 		err := DB.Transaction(func(tx *gorm.DB) error {
 			var user User
 			if err := lockForUpdate(tx).Select("id", "quota").First(&user, order.UserId).Error; err != nil {
@@ -1025,12 +1021,7 @@ func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
 			return ErrTopUpStatusInvalid
 		}
 		var used int64
-		usedQuery := tx.Model(&TopUp{}).Where("id <> ?", topUp.Id)
-		if isBsc {
-			usedQuery = usedQuery.Where("usdt_event_key = ?", *eventKey)
-		} else {
-			usedQuery = usedQuery.Where("tx_hash = ? AND (usdt_network <> ? OR usdt_network IS NULL)", txHash, "BSC")
-		}
+		usedQuery := tx.Model(&TopUp{}).Where("id <> ? AND payment_provider = ? AND (usdt_tx_hash = ? OR tx_hash = ?)", topUp.Id, PaymentProviderUsdt, txHash, txHash)
 		if err := usedQuery.Count(&used).Error; err != nil {
 			return err
 		}
@@ -1040,9 +1031,8 @@ func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
 		updates := map[string]any{"status": common.TopUpStatusSuccess, "tx_hash": txHash, "complete_time": common.GetTimestamp(), "usdt_amount_key": nil}
 		if isBsc {
 			updates["usdt_event_key"] = eventKey
-		} else {
-			updates["usdt_tx_hash"] = txHash
 		}
+		updates["usdt_tx_hash"] = txHash
 		result := tx.Model(topUp).Where("status = ?", topUp.Status).Updates(updates)
 		if result.Error != nil {
 			return result.Error
@@ -1073,7 +1063,7 @@ func ExpireElapsedUsdtOrders(now int64) error {
 
 func GetPendingUsdtOrders() ([]*TopUp, error) {
 	var orders []*TopUp
-	err := DB.Where("payment_provider = ? AND ((status = ? AND usdt_amount_key IS NOT NULL) OR (usdt_network = ? AND status = ? AND (usdt_scan_complete = ? OR usdt_scan_complete IS NULL)) OR ((usdt_network = ? OR usdt_network = '' OR usdt_network IS NULL) AND status = ? AND expire_time > ?))", PaymentProviderUsdt, common.TopUpStatusPending, "BSC", "expired", false, "TRC20", "expired", time.Now().Unix()-UsdtTrc20ReconcileGraceSeconds).Order("id ASC").Find(&orders).Error
+	err := DB.Where("payment_provider = ? AND (usdt_network = ? OR usdt_network = '' OR usdt_network IS NULL) AND ((status = ? AND usdt_amount_key IS NOT NULL) OR (status = ? AND expire_time > ?))", PaymentProviderUsdt, "TRC20", common.TopUpStatusPending, "expired", time.Now().Unix()-UsdtTrc20ReconcileGraceSeconds).Order("id ASC").Find(&orders).Error
 	return orders, err
 }
 

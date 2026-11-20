@@ -30,6 +30,8 @@ import (
 
 type usdtTransport func(*http.Request) (*http.Response, error)
 
+const testBscTransferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
 func (f usdtTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func usdtFixture(t *testing.T) {
@@ -154,7 +156,7 @@ func TestUsdtConfirmedTransfersAndPagination(t *testing.T) {
 	usdtFixture(t)
 	order := newUsdtOrder(t)
 	hash := strings.Repeat("b", 64)
-	micros := strings.Split(*order.UsdtAmountKey, ":")[1]
+	micros := decimal.NewFromFloat(order.Money).Mul(decimal.NewFromInt(1000000)).StringFixed(0)
 	valid := service.TRC20Transaction{TransactionID: hash, To: order.UsdtAddress, Type: "Transfer", Value: micros, BlockTimestamp: order.UsdtStartTime, TokenInfo: service.TokenInfo{Address: order.UsdtAddress, Decimals: 6}}
 	for _, tc := range []struct {
 		name   string
@@ -571,7 +573,7 @@ func TestUsdtAmountSlotsExhaustionAndRelease(t *testing.T) {
 	now := time.Now().Unix()
 	orders := make([]model.TopUp, 500)
 	for i := range 500 {
-		key := fmt.Sprintf("%s:%d", setting.UsdtReceiveAddress, 10000000+int64(i+1)*1000)
+		key := fmt.Sprintf("usdt-suffix:%03d", i+1)
 		orders[i] = model.TopUp{UserId: 2, Amount: 10, Money: 10 + float64(i+1)/1000, TradeNo: fmt.Sprintf("occupied-%d", i), PaymentMethod: "usdt", PaymentProvider: "usdt", Status: "pending", CreateTime: now, ExpireTime: now + 1800, UsdtAddress: setting.UsdtReceiveAddress, UsdtQuota: 5000000, UsdtAmountKey: &key}
 	}
 	require.NoError(t, model.DB.CreateInBatches(orders, 25).Error)
@@ -643,7 +645,7 @@ func TestUsdtBscConfigurationOrdersAndEventCredit(t *testing.T) {
 	assert.NotEqual(t, tron.Id, order.Id)
 	assert.Equal(t, setting.BscUsdtContract, order.UsdtContract)
 	assert.Equal(t, 18, order.UsdtDecimals)
-	assert.Equal(t, int64(100), order.UsdtStartBlock)
+	assert.Zero(t, order.UsdtStartBlock)
 	assert.Equal(t, strings.ToLower(setting.UsdtBscReceiveAddress), order.UsdtAddress)
 	assert.NotEqual(t, *tron.UsdtAmountKey, *order.UsdtAmountKey)
 	// Changed receive configuration must not change the resumed order.
@@ -662,31 +664,28 @@ func TestUsdtBscConfigurationOrdersAndEventCredit(t *testing.T) {
 	require.NoError(t, model.RechargeUsdt(order.TradeNo, hash, 0))
 	require.NoError(t, model.RechargeUsdt(order.TradeNo, hash, 0))
 	require.Error(t, model.RechargeUsdt(second.TradeNo, hash, 0))
-	require.NoError(t, model.RechargeUsdt(second.TradeNo, hash, 1), "different transfer in one transaction can credit its own order")
-	require.NoError(t, model.RechargeUsdt(tron.TradeNo, hash), "TRON and BSC have separate payment identities")
+	require.Error(t, model.RechargeUsdt(second.TradeNo, hash, 1), "the same transaction hash cannot credit another order")
+	require.Error(t, model.RechargeUsdt(tron.TradeNo, hash), "the transaction hash is unique across USDT networks")
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, order.UsdtQuota+second.UsdtQuota+tron.UsdtQuota, user.Quota)
+	assert.Equal(t, order.UsdtQuota, user.Quota)
 	require.NoError(t, model.UpdateOption("UsdtEnabled", "false"))
 	assert.True(t, setting.IsUsdtTopUpEnabled(), "BSC remains available with TRC20 disabled")
 	assert.Equal(t, "error", usdtRequest(t, RequestUsdtPay, 1, `{"amount":10}`)["message"], "legacy request never silently selects BSC")
 	assert.Equal(t, "error", usdtRequest(t, RequestUsdtPay, 1, `{"amount":10,"network":"ETH"}`)["message"])
 }
 
-func TestUsdtBscTransferProofAndCursor(t *testing.T) {
-	for _, scenario := range []string{"valid", "wrong network", "wrong token", "wrong recipient", "wrong amount", "approval", "removed", "before order", "after expiry", "failed receipt", "receipt missing transfer", "noncanonical", "unfinalized", "query failure", "delayed confirmation", "expired unpaid"} {
+func TestUsdtBscReceiptVerificationAndDuplicateHash(t *testing.T) {
+	scenarios := []string{"valid", "wrong network", "wrong token", "wrong recipient", "wrong amount", "approval", "removed", "before order", "after expiry", "failed receipt", "receipt missing transfer", "log metadata mismatch", "noncanonical", "query failure"}
+	for _, scenario := range scenarios {
 		t.Run(scenario, func(t *testing.T) {
 			usdtFixture(t)
 			setting.UsdtBscRpcURL = "https://example.com/bsc"
 			now := time.Now().Unix()
-			order, err := model.CreateUsdtOrder(&model.TopUp{UserId: 1, Amount: 20, TradeNo: "bsc-proof", PaymentMethod: "usdt", PaymentProvider: "usdt", Status: "pending", CreateTime: now - 60, ExpireTime: now + 120, UsdtAddress: "0x" + strings.Repeat("1", 40), UsdtNetwork: "BSC", UsdtStartBlock: 100})
+			order, err := model.CreateUsdtOrder(&model.TopUp{UserId: 1, Amount: 20, TradeNo: "bsc-proof", PaymentMethod: "usdt", PaymentProvider: "usdt", Status: "pending", CreateTime: now - 60, ExpireTime: now + 120, UsdtAddress: "0x" + strings.Repeat("1", 40), UsdtNetwork: "BSC"})
 			require.NoError(t, err)
-			if scenario == "delayed confirmation" || scenario == "expired unpaid" {
-				require.NoError(t, model.DB.Model(order).Update("expire_time", now-1).Error)
-				order.ExpireTime = now - 1
-			}
 			blockHash, txHash := "0x"+strings.Repeat("a", 64), "0x"+strings.Repeat("b", 64)
-			entry := map[string]any{"address": setting.BscUsdtContract, "topics": []string{"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", "0x" + strings.Repeat("0", 64), "0x" + strings.Repeat("0", 24) + order.UsdtAddress[2:]}, "data": "0x" + fmt.Sprintf("%064x", decimal.NewFromFloat(order.Money).Shift(18).BigInt()), "blockNumber": "0x65", "blockHash": blockHash, "transactionHash": txHash, "logIndex": "0x0", "removed": false}
+			entry := map[string]any{"address": setting.BscUsdtContract, "topics": []string{testBscTransferTopic, "0x" + strings.Repeat("0", 64), "0x" + strings.Repeat("0", 24) + order.UsdtAddress[2:]}, "data": "0x" + fmt.Sprintf("%064x", decimal.NewFromFloat(order.Money).Shift(18).BigInt()), "blockNumber": "0x65", "blockHash": blockHash, "transactionHash": txHash, "logIndex": "0x0", "removed": false}
 			stamp := now - 10
 			switch scenario {
 			case "wrong token":
@@ -704,38 +703,17 @@ func TestUsdtBscTransferProofAndCursor(t *testing.T) {
 			case "after expiry":
 				stamp = order.ExpireTime
 			}
-			logCalls := 0
-			bscFixture(t, func(method string, params []any) any {
+			bscFixture(t, func(method string, _ []any) any {
 				switch method {
 				case "eth_chainId":
 					if scenario == "wrong network" {
 						return "0x1"
 					}
 					return "0x38"
-				case "eth_getBlockByNumber":
-					if params[0] == "finalized" {
-						height := "0x65"
-						if scenario == "unfinalized" {
-							height = "0x64"
-						}
-						return map[string]string{"number": height, "hash": blockHash, "timestamp": fmt.Sprintf("0x%x", now)}
-					}
-					hash := blockHash
-					if scenario == "noncanonical" {
-						hash = "0x" + strings.Repeat("c", 64)
-					}
-					return map[string]string{"number": "0x65", "hash": hash, "timestamp": fmt.Sprintf("0x%x", stamp)}
-				case "eth_getLogs":
-					logCalls++
-					if scenario == "expired unpaid" {
-						return []any{}
-					}
-					assert.Equal(t, "0x65", params[0].(map[string]any)["fromBlock"])
+				case "eth_getTransactionReceipt":
 					if scenario == "query failure" {
 						return nil
 					}
-					return []any{entry}
-				case "eth_getTransactionReceipt":
 					status := "0x1"
 					if scenario == "failed receipt" {
 						status = "0x0"
@@ -744,47 +722,58 @@ func TestUsdtBscTransferProofAndCursor(t *testing.T) {
 					if scenario == "receipt missing transfer" {
 						logs = []any{}
 					}
+					if scenario == "log metadata mismatch" {
+						entry["transactionHash"] = "0x" + strings.Repeat("c", 64)
+					}
 					return map[string]any{"status": status, "blockNumber": "0x65", "blockHash": blockHash, "transactionHash": txHash, "logs": logs}
+				case "eth_getBlockByNumber":
+					hash := blockHash
+					if scenario == "noncanonical" {
+						hash = "0x" + strings.Repeat("c", 64)
+					}
+					return map[string]string{"number": "0x65", "hash": hash, "timestamp": fmt.Sprintf("0x%x", stamp)}
 				default:
 					t.Fatalf("unexpected method %s", method)
 					return nil
 				}
 			})
 			if scenario == "valid" {
-				body := fmt.Sprintf(`{"trade_no":%q}`, order.TradeNo)
-				assert.Equal(t, "success", usdtRequest(t, CheckUsdtPayment, 1, body)["message"])
-				assert.Equal(t, "success", usdtRequest(t, CheckUsdtPayment, 1, body)["message"])
-			} else {
-				err = service.CheckUsdtOrder(context.Background(), order)
-			}
-			stored := model.GetTopUpByTradeNo(order.TradeNo)
-			switch scenario {
-			case "valid", "delayed confirmation":
-				require.NoError(t, err)
+				body := fmt.Sprintf(`{"trade_no":%q,"tx_hash":%q}`, order.TradeNo, txHash)
+				assert.Equal(t, "success", usdtRequest(t, CheckBscUsdtPayment, 1, body)["message"])
+				assert.Equal(t, "success", usdtRequest(t, CheckBscUsdtPayment, 1, body)["message"])
+				stored := model.GetTopUpByTradeNo(order.TradeNo)
 				assert.Equal(t, "success", stored.Status)
-				require.NotNil(t, stored.UsdtEventKey)
-			case "expired unpaid":
-				require.NoError(t, err)
-				assert.Equal(t, "expired", stored.Status)
-				assert.True(t, stored.UsdtScanComplete)
-				pending, err := model.GetPendingUsdtOrders()
-				require.NoError(t, err)
-				assert.Empty(t, pending, "fully checked expired BSC orders leave the monitor queue")
-			case "wrong network", "query failure", "failed receipt", "receipt missing transfer", "noncanonical":
+				assert.Equal(t, strings.TrimPrefix(txHash, "0x"), *stored.UsdtTxHash)
+				assert.NotNil(t, stored.UsdtEventKey)
+			} else {
+				err = service.CheckBscUsdtPayment(context.Background(), order, txHash)
 				require.Error(t, err)
-				assert.Equal(t, int64(100), stored.UsdtScanBlock)
-				assert.Equal(t, "pending", stored.Status)
-			default:
-				require.NoError(t, err)
-				assert.Equal(t, "pending", stored.Status)
-			}
-			if scenario == "wrong amount" {
-				assert.Equal(t, int64(101), stored.UsdtScanBlock)
-				require.NoError(t, service.CheckUsdtOrder(context.Background(), stored))
-				assert.Equal(t, 1, logCalls, "persisted cursor prevents repeating an already checked range")
+				assert.Equal(t, "pending", model.GetTopUpByTradeNo(order.TradeNo).Status)
 			}
 		})
 	}
+}
+
+func TestUsdtBscTransactionHashIsGloballyUnique(t *testing.T) {
+	usdtFixture(t)
+	first := newUsdtOrder(t)
+	first.UsdtNetwork = "BSC"
+	first.UsdtAddress = "0x" + strings.Repeat("1", 40)
+	first.UsdtContract = setting.BscUsdtContract
+	first.UsdtDecimals = 18
+	require.NoError(t, model.DB.Save(first).Error)
+	hash := strings.Repeat("c", 64)
+	require.NoError(t, model.RechargeUsdt(first.TradeNo, hash, 0))
+	second := *first
+	second.Id = 0
+	second.TradeNo = "bsc-duplicate"
+	second.Status = common.TopUpStatusPending
+	second.CompleteTime = 0
+	second.UsdtAmountKey = nil
+	second.UsdtTxHash = nil
+	second.UsdtEventKey = nil
+	require.NoError(t, model.DB.Create(&second).Error)
+	require.ErrorIs(t, model.RechargeUsdt(second.TradeNo, hash, 1), model.ErrUsdtTransactionAlreadyCredited)
 }
 
 func TestUsdtBscMigrationPreservesTronReservationsAndClaims(t *testing.T) {

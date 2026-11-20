@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -21,6 +22,10 @@ type UsdtPayRequest struct {
 }
 type UsdtCheckRequest struct {
 	TradeNo string `json:"trade_no"`
+}
+type BscUsdtCheckRequest struct {
+	TradeNo string `json:"trade_no"`
+	TxHash  string `json:"tx_hash"`
 }
 
 func isUsdtTopUpEnabled() bool {
@@ -43,15 +48,6 @@ func RequestUsdtPay(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid USDT top-up amount"})
 		return
 	}
-	var startBlock int64
-	if config.Network == "BSC" {
-		var err error
-		startBlock, err = service.ValidateBscProvider(c.Request.Context(), config.RPCURL)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "BSC payment lookup is unavailable; please try again later"})
-			return
-		}
-	}
 	// USDT purchases USD wallet units, independently of display currency and fiat pricing.
 	quota, err := common.WalletQuotaFromDecimalStrict(decimal.NewFromInt(req.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
 	if err != nil {
@@ -64,7 +60,7 @@ func RequestUsdtPay(c *gin.Context) {
 	now := time.Now().Unix()
 	order, err := model.CreateUsdtOrder(&model.TopUp{
 		UserId: c.GetInt("id"), Amount: req.Amount, UsdtQuota: quota, UsdtAddress: config.Address,
-		UsdtNetwork: config.Network, UsdtStartBlock: startBlock,
+		UsdtNetwork:   config.Network,
 		TradeNo:       fmt.Sprintf("USDT%d%s", c.GetInt("id"), common.GetRandomString(24)),
 		PaymentMethod: model.PaymentMethodUsdt, PaymentProvider: model.PaymentProviderUsdt,
 		CreateTime: now, ExpireTime: now + int64(max(300, min(86400, config.OrderExpireTime))), Status: common.TopUpStatusPending,
@@ -93,6 +89,10 @@ func CheckUsdtPayment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Order not found"})
 		return
 	}
+	if order.UsdtNetwork == "BSC" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "BSC payments require a transaction hash"})
+		return
+	}
 	if order.Status != common.TopUpStatusSuccess {
 		if err := service.CheckUsdtOrder(c.Request.Context(), order); err != nil {
 			logger.LogError(c.Request.Context(), "USDT verification failed: "+err.Error())
@@ -110,4 +110,28 @@ func CheckUsdtPayment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "pending", "data": "Payment not confirmed yet"})
+}
+
+func CheckBscUsdtPayment(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	var req BscUsdtCheckRequest
+	if c.ShouldBindJSON(&req) != nil || req.TradeNo == "" || len(req.TradeNo) > 255 || req.TxHash == "" || len(req.TxHash) > 128 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid BSC payment request"})
+		return
+	}
+	order := model.GetTopUpByTradeNo(req.TradeNo)
+	if order == nil || order.UserId != c.GetInt("id") || order.PaymentProvider != model.PaymentProviderUsdt || order.PaymentMethod != model.PaymentMethodUsdt || order.UsdtNetwork != "BSC" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Order not found"})
+		return
+	}
+	if err := service.CheckBscUsdtPayment(c.Request.Context(), order, req.TxHash); err != nil {
+		if errors.Is(err, model.ErrUsdtOrderExpired) {
+			c.JSON(http.StatusOK, gin.H{"message": "expired", "data": "Payment window has ended. Do not send funds to this order."})
+			return
+		}
+		logger.LogError(c.Request.Context(), "BSC USDT verification failed: "+err.Error())
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Unable to verify BSC payment; please check the transaction hash and try again"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": "Payment credited"})
 }

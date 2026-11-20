@@ -69,9 +69,6 @@ func CheckPendingUsdtOrders(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if order.UsdtNetwork == "BSC" {
-			if err := CheckUsdtOrder(ctx, order); err != nil {
-				failures = append(failures, fmt.Errorf("%s: %w", order.TradeNo, err))
-			}
 			continue
 		}
 		if _, exists := groups[order.UsdtAddress]; !exists {

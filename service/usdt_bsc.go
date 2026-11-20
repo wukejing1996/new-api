@@ -39,6 +39,14 @@ type bscLog struct {
 	Removed         bool     `json:"removed"`
 }
 
+type bscReceipt struct {
+	Status          string   `json:"status"`
+	TransactionHash string   `json:"transactionHash"`
+	BlockHash       string   `json:"blockHash"`
+	BlockNumber     string   `json:"blockNumber"`
+	Logs            []bscLog `json:"logs"`
+}
+
 func bscRPC(ctx context.Context, endpoint, method string, params any, result any) error {
 	if !setting.ValidBscRPCURL(endpoint) {
 		return errors.New("configure a BSC HTTPS RPC URL")
@@ -118,7 +126,6 @@ func bscHeader(ctx context.Context, endpoint, tag string) (bscBlock, int64, int6
 	return block, number, stamp, nil
 }
 
-// The configured endpoint must support historical logs and finalized blocks.
 // URL credentials never appear in returned errors or public configuration.
 func ValidateBscProvider(ctx context.Context, endpoint string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -143,28 +150,37 @@ func ValidateBscProvider(ctx context.Context, endpoint string) (int64, error) {
 	if latest <= 0 || stamp < time.Now().Unix()-120 || stamp > time.Now().Unix()+30 {
 		return 0, errors.New("BSC RPC is not synchronized")
 	}
-	finalized, height, _, err := bscHeader(ctx, endpoint, "finalized")
-	if err != nil {
-		return 0, err
-	}
-	if height > latest {
-		return 0, errors.New("invalid BSC finalized block")
-	}
-	var logs []bscLog
-	if err := bscRPC(ctx, endpoint, "eth_getLogs", []any{map[string]any{"address": setting.BscUsdtContract, "fromBlock": finalized.Number, "toBlock": finalized.Number, "topics": []any{bscTransferTopic}}}, &logs); err != nil {
-		return 0, err
-	}
 	return latest, nil
 }
 
-// Each successful range persists its cursor so retries and restarts resume safely.
-// Expired orders remain eligible until all blocks in their original window are final.
-func CheckBscUsdtOrder(ctx context.Context, order *model.TopUp) error {
-	if !setting.ValidBscAddress(order.UsdtAddress) || order.UsdtContract != setting.BscUsdtContract || order.UsdtDecimals != 18 || order.UsdtStartBlock <= 0 || order.UsdtScanBlock < order.UsdtStartBlock {
+func CheckBscUsdtPayment(ctx context.Context, order *model.TopUp, txHash string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if order.UsdtNetwork != "BSC" || !setting.ValidBscAddress(order.UsdtAddress) || order.UsdtContract != setting.BscUsdtContract || order.UsdtDecimals != 18 {
 		return errors.New("invalid BSC order snapshot")
 	}
-	if order.UsdtScanComplete {
-		return nil
+	hash := strings.ToLower(strings.TrimSpace(txHash))
+	hash = strings.TrimPrefix(hash, "0x")
+	if !bscHash("0x" + hash) {
+		return errors.New("invalid BSC transaction hash")
+	}
+	if order.Status == common.TopUpStatusSuccess {
+		if order.UsdtTxHash != nil && *order.UsdtTxHash == hash {
+			return nil
+		}
+		return model.ErrTopUpStatusInvalid
+	}
+	if order.Status == "expired" {
+		return model.ErrUsdtOrderExpired
+	}
+	if order.Status != common.TopUpStatusPending {
+		return model.ErrTopUpStatusInvalid
+	}
+	if time.Now().Unix() >= order.ExpireTime {
+		if err := model.ExpireUsdtOrder(order.Id); err != nil {
+			return err
+		}
+		return model.ErrUsdtOrderExpired
 	}
 	endpoint := setting.GetUsdtNetworkConfig("BSC").RPCURL
 	var chain string
@@ -174,91 +190,55 @@ func CheckBscUsdtOrder(ctx context.Context, order *model.TopUp) error {
 	if n, err := bscQuantity(chain); err != nil || n != 56 {
 		return errors.New("RPC must use BSC mainnet (56)")
 	}
-	_, finalHeight, finalTime, err := bscHeader(ctx, endpoint, "finalized")
+	var receipt bscReceipt
+	canonicalHash := "0x" + hash
+	if err := bscRPC(ctx, endpoint, "eth_getTransactionReceipt", []any{canonicalHash}, &receipt); err != nil {
+		return err
+	}
+	if receipt.Status != "0x1" || !strings.EqualFold(receipt.TransactionHash, canonicalHash) || !bscHash(receipt.BlockHash) || receipt.BlockNumber == "" {
+		return errors.New("BSC transaction receipt is not successful")
+	}
+	block, _, stamp, err := bscHeader(ctx, endpoint, receipt.BlockNumber)
 	if err != nil {
 		return err
 	}
-	if finalTime > time.Now().Unix()+30 {
-		return errors.New("invalid BSC finalized timestamp")
+	if !strings.EqualFold(block.Hash, receipt.BlockHash) {
+		return errors.New("BSC transaction is not canonical")
+	}
+	if stamp < order.CreateTime || stamp >= order.ExpireTime {
+		return errors.New("BSC transfer is outside the order window")
 	}
 	target := decimal.NewFromFloat(order.Money).Shift(18)
 	if target.Sign() <= 0 || !target.Equal(target.Truncate(0)) {
 		return errors.New("invalid BSC amount")
 	}
 	expected := "0x" + strings.Repeat("0", 24) + strings.ToLower(order.UsdtAddress[2:])
-	for range 20 {
-		from := order.UsdtScanBlock + 1
-		if from > finalHeight {
-			return nil
+	var amountMismatch bool
+	var logIndex uint64
+	for _, entry := range receipt.Logs {
+		if entry.Removed || !strings.EqualFold(entry.Address, order.UsdtContract) || len(entry.Topics) != 3 || !strings.EqualFold(entry.Topics[0], bscTransferTopic) || !bscHash(entry.Topics[1]) || !strings.EqualFold(entry.Topics[2], expected) || len(entry.Data) != 66 || !strings.HasPrefix(entry.Data, "0x") {
+			continue
 		}
-		to := min(from+199, finalHeight)
-		var logs []bscLog
-		if err := bscRPC(ctx, endpoint, "eth_getLogs", []any{map[string]any{"address": order.UsdtContract, "fromBlock": fmt.Sprintf("0x%x", from), "toBlock": fmt.Sprintf("0x%x", to), "topics": []any{bscTransferTopic, nil, expected}}}, &logs); err != nil {
-			return err
+		if !strings.EqualFold(entry.TransactionHash, canonicalHash) || !strings.EqualFold(entry.BlockHash, receipt.BlockHash) || entry.BlockNumber != receipt.BlockNumber || !bscHash(entry.TransactionHash) || !bscHash(entry.BlockHash) {
+			return errors.New("invalid BSC transfer proof")
 		}
-		for _, entry := range logs {
-			if entry.Removed || !strings.EqualFold(entry.Address, order.UsdtContract) || len(entry.Topics) != 3 || !strings.EqualFold(entry.Topics[0], bscTransferTopic) || !strings.EqualFold(entry.Topics[2], expected) || !bscHash(entry.Topics[1]) || len(entry.Data) != 66 || !strings.HasPrefix(entry.Data, "0x") {
-				continue
-			}
-			value, ok := new(big.Int).SetString(entry.Data[2:], 16)
-			if !ok || value.Cmp(target.BigInt()) != 0 {
-				continue
-			}
-			height, err := bscQuantity(entry.BlockNumber)
-			index, indexErr := bscQuantity(entry.LogIndex)
-			if err != nil || indexErr != nil || height < from || height > to || !bscHash(entry.TransactionHash) || !bscHash(entry.BlockHash) {
-				return errors.New("invalid BSC transfer proof")
-			}
-			block, _, stamp, err := bscHeader(ctx, endpoint, entry.BlockNumber)
-			if err != nil {
-				return err
-			}
-			if !strings.EqualFold(block.Hash, entry.BlockHash) {
-				return errors.New("BSC block changed; retry verification")
-			}
-			if stamp < order.CreateTime || stamp >= order.ExpireTime {
-				continue
-			}
-			var receipt struct {
-				Status          string   `json:"status"`
-				TransactionHash string   `json:"transactionHash"`
-				BlockHash       string   `json:"blockHash"`
-				BlockNumber     string   `json:"blockNumber"`
-				Logs            []bscLog `json:"logs"`
-			}
-			if err := bscRPC(ctx, endpoint, "eth_getTransactionReceipt", []any{entry.TransactionHash}, &receipt); err != nil {
-				return err
-			}
-			if receipt.Status != "0x1" || !strings.EqualFold(receipt.TransactionHash, entry.TransactionHash) || !strings.EqualFold(receipt.BlockHash, entry.BlockHash) || receipt.BlockNumber != entry.BlockNumber {
-				return errors.New("BSC transfer receipt is not successful or canonical")
-			}
-			proven := false
-			for _, proof := range receipt.Logs {
-				if !proof.Removed && proof.LogIndex == entry.LogIndex && strings.EqualFold(proof.TransactionHash, entry.TransactionHash) && strings.EqualFold(proof.BlockHash, entry.BlockHash) && proof.BlockNumber == entry.BlockNumber && strings.EqualFold(proof.Address, entry.Address) && strings.EqualFold(proof.Data, entry.Data) && len(proof.Topics) == 3 && strings.EqualFold(proof.Topics[0], entry.Topics[0]) && strings.EqualFold(proof.Topics[1], entry.Topics[1]) && strings.EqualFold(proof.Topics[2], entry.Topics[2]) {
-					proven = true
-					break
-				}
-			}
-			if !proven {
-				return errors.New("BSC receipt does not contain the transfer")
-			}
-			return model.RechargeUsdt(order.TradeNo, entry.TransactionHash[2:], uint64(index))
+		value, ok := new(big.Int).SetString(entry.Data[2:], 16)
+		if !ok {
+			continue
 		}
-		endTime := finalTime
-		if to != finalHeight {
-			_, _, endTime, err = bscHeader(ctx, endpoint, fmt.Sprintf("0x%x", to))
-			if err != nil {
-				return err
-			}
+		if value.Cmp(target.BigInt()) != 0 {
+			amountMismatch = true
+			continue
 		}
-		complete := endTime >= order.ExpireTime
-		if err := model.AdvanceBscScan(order.Id, to, complete); err != nil {
-			return err
+		index, err := bscQuantity(entry.LogIndex)
+		if err != nil || index < 0 {
+			return errors.New("invalid BSC transfer log index")
 		}
-		order.UsdtScanBlock = to
-		if complete {
-			return nil
-		}
+		logIndex = uint64(index)
+		return model.RechargeUsdt(order.TradeNo, hash, logIndex)
 	}
-	return nil
+	if amountMismatch {
+		return errors.New("BSC transfer amount does not match the order")
+	}
+	return errors.New("BSC receipt does not contain the matching USDT transfer")
 }
