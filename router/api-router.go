@@ -174,6 +174,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/usdt/request", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("usdt-create"), controller.RequestUsdtPay)
 				selfRoute.POST("/usdt/check", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("usdt-check"), controller.CheckUsdtPayment)
 				selfRoute.POST("/usdt/bsc/check", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("usdt-bsc-check"), controller.CheckBscUsdtPayment)
+				selfRoute.POST("/usdt/eth/check", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("usdt-eth-check"), controller.CheckEthUsdtPayment)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 

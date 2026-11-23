@@ -52,6 +52,7 @@ import type {
   WaffoPayMethod,
 } from '../types'
 import { CreemProductsSection } from './creem-products-section'
+import { getUsdtNetworkLabel } from '../lib/payment'
 
 interface RechargeFormCardProps {
   usdtNetwork?: string
@@ -229,7 +230,7 @@ export function RechargeFormCard({
           <div className='flex flex-wrap gap-2'>
             {usdtNetworks.map((network) => (
               <Button key={network} type='button' variant={network === currentUsdtNetwork ? 'default' : 'outline'} aria-pressed={network === currentUsdtNetwork} onClick={() => onUsdtNetworkChange(network)}>
-                {network === 'BSC' ? 'BSC (BEP20)' : 'TRON (TRC20)'}
+                {getUsdtNetworkLabel(network)}
               </Button>
             ))}
           </div>

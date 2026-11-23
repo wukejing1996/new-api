@@ -23,7 +23,7 @@ type UsdtPayRequest struct {
 type UsdtCheckRequest struct {
 	TradeNo string `json:"trade_no"`
 }
-type BscUsdtCheckRequest struct {
+type EvmUsdtCheckRequest struct {
 	TradeNo string `json:"trade_no"`
 	TxHash  string `json:"tx_hash"`
 }
@@ -93,6 +93,10 @@ func CheckUsdtPayment(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "BSC payments require a transaction hash"})
 		return
 	}
+	if order.UsdtNetwork == "ETH" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Ethereum payments require a transaction hash"})
+		return
+	}
 	if order.Status != common.TopUpStatusSuccess {
 		if err := service.CheckUsdtOrder(c.Request.Context(), order); err != nil {
 			logger.LogError(c.Request.Context(), "USDT verification failed: "+err.Error())
@@ -114,7 +118,7 @@ func CheckUsdtPayment(c *gin.Context) {
 
 func CheckBscUsdtPayment(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
-	var req BscUsdtCheckRequest
+	var req EvmUsdtCheckRequest
 	if c.ShouldBindJSON(&req) != nil || req.TradeNo == "" || len(req.TradeNo) > 255 || req.TxHash == "" || len(req.TxHash) > 128 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid BSC payment request"})
 		return
@@ -134,4 +138,30 @@ func CheckBscUsdtPayment(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": "Payment credited"})
+}
+
+func CheckEthUsdtPayment(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	var req EvmUsdtCheckRequest
+	if c.ShouldBindJSON(&req) != nil || req.TradeNo == "" || len(req.TradeNo) > 255 || req.TxHash == "" || len(req.TxHash) > 128 {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Invalid Ethereum payment request"})
+		return
+	}
+	order := model.GetTopUpByTradeNo(req.TradeNo)
+	if order == nil || order.UserId != c.GetInt("id") || order.PaymentProvider != model.PaymentProviderUsdt || order.PaymentMethod != model.PaymentMethodUsdt || order.UsdtNetwork != "ETH" {
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Order not found"})
+		return
+	}
+	err := service.CheckEthUsdtPayment(c.Request.Context(), order, req.TxHash)
+	switch {
+	case err == nil:
+		c.JSON(http.StatusOK, gin.H{"message": "success", "data": "Payment credited"})
+	case errors.Is(err, service.ErrEthUsdtPending):
+		c.JSON(http.StatusOK, gin.H{"message": "pending", "data": "Payment not confirmed yet"})
+	case errors.Is(err, model.ErrUsdtOrderExpired):
+		c.JSON(http.StatusOK, gin.H{"message": "expired", "data": "This transfer was outside the payment window for this order."})
+	default:
+		logger.LogError(c.Request.Context(), "Ethereum USDT verification failed: "+err.Error())
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "Unable to verify Ethereum payment; please check the transaction hash and try again"})
+	}
 }

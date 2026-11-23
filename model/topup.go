@@ -654,6 +654,9 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		if topUp.Status != common.TopUpStatusPending && !(topUp.PaymentProvider == PaymentProviderUsdt && (topUp.Status == "expired" || topUp.Status == common.TopUpStatusProcessing)) {
 			return common.NewMessage("Order is not pending payment and cannot be completed")
 		}
+		if topUp.PaymentProvider == PaymentProviderUsdt && topUp.UsdtNetwork == "ETH" {
+			return common.NewMessage("Ethereum orders require a verified transaction hash")
+		}
 
 		var quotaErr error
 		quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)))
@@ -901,6 +904,12 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 		}
 		order.UsdtAddress = strings.ToLower(order.UsdtAddress)
 		order.UsdtContract, order.UsdtDecimals = setting.BscUsdtContract, 18
+	} else if order.UsdtNetwork == "ETH" {
+		if !setting.ValidBscAddress(order.UsdtAddress) {
+			return nil, errors.New("invalid Ethereum order snapshot")
+		}
+		order.UsdtAddress = strings.ToLower(order.UsdtAddress)
+		order.UsdtContract, order.UsdtDecimals = setting.EthUsdtContract, 6
 	} else if order.UsdtNetwork == "TRC20" {
 		order.UsdtContract, order.UsdtDecimals = setting.TronUsdtContract, 6
 	} else {
@@ -914,6 +923,7 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 	if err != nil {
 		return nil, err
 	}
+	expiration := order.ExpireTime - order.CreateTime
 	for attempt := range 500 {
 		suffix := (start.Int64()+int64(attempt))%500 + 1
 		micros := order.Amount*1000000 + suffix*1000
@@ -957,6 +967,10 @@ func CreateUsdtOrder(order *TopUp) (*TopUp, error) {
 			order.Money = money.InexactFloat64()
 			order.UsdtQuota = quota
 			order.UsdtStartTime = time.Now().UnixMilli()
+			if order.UsdtNetwork == "ETH" {
+				order.CreateTime = order.UsdtStartTime / 1000
+				order.ExpireTime = order.CreateTime + expiration
+			}
 			order.Id = 0
 			return tx.Create(order).Error
 		})
@@ -980,6 +994,19 @@ var ErrUsdtTransactionAlreadyCredited = errors.New("transaction already credited
 // RechargeUsdt commits the transaction claim, order status and wallet credit
 // together. Unique database constraints also protect separate server instances.
 func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
+	return rechargeUsdt(tradeNo, txHash, nil, logIndex)
+}
+
+type EthUsdtBlockProof struct {
+	Number int64
+	Hash   string
+}
+
+func RechargeEthUsdt(tradeNo, txHash string, logIndex uint64, block EthUsdtBlockProof) error {
+	return rechargeUsdt(tradeNo, txHash, &block, []uint64{logIndex})
+}
+
+func rechargeUsdt(tradeNo, txHash string, ethBlock *EthUsdtBlockProof, logIndex []uint64) error {
 	decoded, decodeErr := hex.DecodeString(txHash)
 	if decodeErr != nil || len(decoded) != 32 {
 		return errors.New("invalid transaction hash")
@@ -997,22 +1024,31 @@ func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
 		if topUp.UsdtAddress == "" || topUp.UsdtQuota <= 0 {
 			return errors.New("legacy USDT order requires manual reconciliation")
 		}
-		isBsc := topUp.UsdtNetwork == "BSC"
-		if !isBsc && topUp.UsdtNetwork != "" && topUp.UsdtNetwork != "TRC20" {
+		var chainID int
+		switch topUp.UsdtNetwork {
+		case "BSC":
+			chainID = 56
+		case "ETH":
+			chainID = 1
+		case "", "TRC20":
+		default:
 			return errors.New("unsupported USDT network")
 		}
+		if (ethBlock != nil) != (chainID == 1) {
+			return ErrPaymentMethodMismatch
+		}
 		var eventKey *string
-		if isBsc {
+		if chainID != 0 {
 			if len(logIndex) != 1 {
-				return errors.New("BSC transfer index is required")
+				return errors.New("EVM transfer index is required")
 			}
-			key := fmt.Sprintf("56:%s:%d", txHash, logIndex[0])
+			key := fmt.Sprintf("%d:%s:%d", chainID, txHash, logIndex[0])
 			eventKey = &key
 		} else if len(logIndex) != 0 {
 			return errors.New("unexpected transfer index")
 		}
 		if topUp.Status == common.TopUpStatusSuccess {
-			if topUp.TxHash != txHash || (isBsc && (topUp.UsdtEventKey == nil || *topUp.UsdtEventKey != *eventKey)) {
+			if topUp.TxHash != txHash || (eventKey != nil && (topUp.UsdtEventKey == nil || *topUp.UsdtEventKey != *eventKey)) {
 				return ErrTopUpStatusInvalid
 			}
 			return nil
@@ -1029,7 +1065,7 @@ func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
 			return ErrUsdtTransactionAlreadyCredited
 		}
 		updates := map[string]any{"status": common.TopUpStatusSuccess, "tx_hash": txHash, "complete_time": common.GetTimestamp(), "usdt_amount_key": nil}
-		if isBsc {
+		if eventKey != nil {
 			updates["usdt_event_key"] = eventKey
 		}
 		updates["usdt_tx_hash"] = txHash
@@ -1049,6 +1085,9 @@ func RechargeUsdt(tradeNo, txHash string, logIndex ...uint64) error {
 	if quotaToAdd > 0 {
 		syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "usdt topup")
 		RecordLog(topUp.UserId, LogTypeTopup, common.NewMessage("USDT top-up: quota {{quota}}, paid {{amount}} USDT, tx {{tx}}", map[string]any{"quota": logger.FormatQuota(quotaToAdd), "amount": fmt.Sprintf("%.3f", topUp.Money), "tx": txHash}))
+		if ethBlock != nil {
+			common.SysLog(fmt.Sprintf("Finalized Ethereum USDT payment: order=%s chain_id=1 tx=%s log_index=%d block=%d block_hash=%s", tradeNo, txHash, logIndex[0], ethBlock.Number, ethBlock.Hash))
+		}
 		RewardInviterForStripeTopUp(topUp.UserId, topUp.Id, topUp.Money)
 	}
 	return nil

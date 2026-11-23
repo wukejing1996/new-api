@@ -23,14 +23,18 @@ var (
 	UsdtBscEnabled        = false
 	UsdtBscReceiveAddress = ""
 	UsdtBscRpcURL         = ""
+	UsdtEthEnabled        = false
+	UsdtEthReceiveAddress = ""
+	UsdtEthRpcURL         = ""
 )
 
 const BscUsdtContract = "0x55d398326f99059ff775485246999027b3197955"
+const EthUsdtContract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
 const TronUsdtContract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
 func IsUsdtTopUpEnabled() bool {
 	c := GetUsdtConfig()
-	return c.Available() || GetUsdtNetworkConfig("BSC").Available()
+	return c.Available() || GetUsdtNetworkConfig("BSC").Available() || GetUsdtNetworkConfig("ETH").Available()
 }
 
 type UsdtConfig struct {
@@ -41,7 +45,7 @@ type UsdtConfig struct {
 }
 
 func (c UsdtConfig) Available() bool {
-	if c.Network == "BSC" {
+	if c.Network == "BSC" || c.Network == "ETH" {
 		return c.Enabled && ValidBscAddress(c.Address) && ValidBscRPCURL(c.RPCURL)
 	}
 	return c.Enabled && c.Network == "TRC20" && ValidTronAddress(c.Address)
@@ -65,12 +69,17 @@ func GetUsdtNetworkConfig(network string) UsdtConfig {
 	if network == "" || network == "TRC20" {
 		return c
 	}
-	if network != "BSC" {
-		return UsdtConfig{}
-	}
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
-	c.Enabled, c.Address, c.Network, c.RPCURL = UsdtBscEnabled, strings.ToLower(UsdtBscReceiveAddress), "BSC", UsdtBscRpcURL
+	switch network {
+	case "BSC":
+		c.Enabled, c.Address, c.RPCURL = UsdtBscEnabled, strings.ToLower(UsdtBscReceiveAddress), UsdtBscRpcURL
+	case "ETH":
+		c.Enabled, c.Address, c.RPCURL = UsdtEthEnabled, strings.ToLower(UsdtEthReceiveAddress), UsdtEthRpcURL
+	default:
+		return UsdtConfig{}
+	}
+	c.Network = network
 	c.APIKey = ""
 	return c
 }
@@ -104,6 +113,22 @@ func ValidTronAddress(address string) bool {
 
 func ValidateUsdtOption(key, value string) error {
 	switch key {
+	case "UsdtEthEnabled":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("invalid Ethereum enabled value")
+		}
+		c := GetUsdtNetworkConfig("ETH")
+		if value == "true" && (!ValidBscAddress(c.Address) || !ValidBscRPCURL(c.RPCURL)) {
+			return fmt.Errorf("configure an Ethereum receive address and HTTPS RPC URL before enabling Ethereum")
+		}
+	case "UsdtEthReceiveAddress":
+		if value != "" && !ValidBscAddress(value) {
+			return fmt.Errorf("invalid Ethereum receive address")
+		}
+	case "UsdtEthRpcURL":
+		if !ValidBscRPCURL(value) {
+			return fmt.Errorf("invalid Ethereum HTTPS RPC URL")
+		}
 	case "UsdtBscEnabled":
 		if value != "true" && value != "false" {
 			return fmt.Errorf("invalid BSC enabled value")

@@ -77,6 +77,9 @@ const defaults: ComponentProps<typeof PaymentSettingsSection> = {
     UsdtBscEnabled: false,
     UsdtBscReceiveAddress: '',
     UsdtBscRpcURL: '',
+    UsdtEthEnabled: false,
+    UsdtEthReceiveAddress: '',
+    UsdtEthRpcURL: '',
     UsdtMinTopUp: 10,
     UsdtReceiveAddress: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
     UsdtTrongridApiKey: '',
@@ -108,6 +111,31 @@ function Fixture() {
 }
 
 describe('USDT settings', () => {
+  it('saves Ethereum connection details before enabling its independent network', async () => {
+    const updates: Array<{ key: string; value: unknown }> = []
+    vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {
+      updates.push(body as { key: string; value: unknown })
+      return { data: { success: true } }
+    })
+    render(<Fixture />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: 'USDT' }))
+    const address = '0x3932af6fdbc450446bdb4eb4d2d13335c42a0417'
+    const url = 'https://example.com/eth'
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ethereum receive address' }), {
+      target: { value: address },
+    })
+    fireEvent.change(screen.getByLabelText('Ethereum payment lookup URL'), {
+      target: { value: url },
+    })
+    await user.click(screen.getByRole('switch', { name: 'Enable Ethereum (ERC-20) USDT' }))
+    await user.click(screen.getByRole('button', { name: 'Save all settings' }))
+    await waitFor(() => expect(updates).toEqual([
+      { key: 'UsdtEthReceiveAddress', value: address },
+      { key: 'UsdtEthRpcURL', value: url },
+      { key: 'UsdtEthEnabled', value: true },
+    ]))
+  })
   it('saves the BSC address and lookup URL before enabling BSC without changing TRC20', async () => {
     const updates: Array<{ key: string; value: unknown }> = []
     vi.spyOn(api, 'put').mockImplementation(async (_url, body) => {

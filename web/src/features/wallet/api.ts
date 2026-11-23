@@ -269,11 +269,17 @@ export async function requestUsdtPayment(amount: number, network = 'TRC20'): Pro
   return data.data
 }
 
-export async function checkUsdtPayment(tradeNo: string): Promise<boolean> {
+export async function checkUsdtPayment(tradeNo: string, network = 'TRC20', txHash = ''): Promise<boolean> {
+  let path = '/api/user/usdt/check'
+  if (network === 'ETH') path = '/api/user/usdt/eth/check'
+  if (network === 'BSC') path = '/api/user/usdt/bsc/check'
   const { data } = await api.post<{ message: string; data: string }>(
-    '/api/user/usdt/check',
-    { trade_no: tradeNo }
+    path,
+    network === 'ETH' || network === 'BSC'
+      ? { trade_no: tradeNo, tx_hash: txHash }
+      : { trade_no: tradeNo }
   )
   if (data.message === 'error') throw new Error(data.data)
+  if (network === 'ETH' && data.message === 'expired') throw new Error(data.data)
   return data.message === 'success'
 }

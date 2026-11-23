@@ -268,7 +268,7 @@ export function BillingHistoryDialog({
                           <div className='text-sm font-medium'>
                             {getPaymentMethodName(record.payment_method, t)}
                             {record.payment_method === 'usdt' &&
-                              ` · ${record.usdt_network || 'TRC20'}`}
+                              ` · ${record.usdt_network === 'ETH' ? 'Ethereum (ERC-20)' : record.usdt_network || 'TRC20'}`}
                           </div>
                         </div>
                         <div className='space-y-1'>
@@ -295,6 +295,7 @@ export function BillingHistoryDialog({
 
                       {/* Admin Actions */}
                       {isAdmin &&
+                        record.usdt_network !== 'ETH' &&
                         (record.status === 'pending' ||
                           (record.payment_method === 'usdt' &&
                             ['expired', 'processing'].includes(

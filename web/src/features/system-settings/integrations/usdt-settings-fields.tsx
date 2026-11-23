@@ -43,6 +43,9 @@ export type UsdtSettingsValues = {
   UsdtBscEnabled: boolean
   UsdtBscReceiveAddress: string
   UsdtBscRpcURL: string
+  UsdtEthEnabled: boolean
+  UsdtEthReceiveAddress: string
+  UsdtEthRpcURL: string
   UsdtMinTopUp: number
   UsdtReceiveAddress: string
   UsdtTrongridApiKey: string
@@ -61,7 +64,7 @@ export function UsdtSettingsFields() {
         <h3 className='text-lg font-medium'>{t('USDT Payment')}</h3>
         <p className='text-muted-foreground text-sm'>
           {t(
-            'Configure TRC20 and BSC payments independently. Minimum amount and timing apply to both networks.'
+            'Configure TRC20, BSC, and Ethereum payments independently.'
           )}
         </p>
       </div>
@@ -74,7 +77,7 @@ export function UsdtSettingsFields() {
         <div>
           <h4 className='font-medium'>{t('Shared payment settings')}</h4>
           <p className='text-muted-foreground text-sm'>
-            {t('These settings apply to both TRC20 and BSC.')}
+            {t('Minimum amount and order expiration apply to all USDT networks. The check interval applies to TRC20.')}
           </p>
         </div>
         <SettingsFormGrid className='xl:grid-cols-3'>
@@ -297,6 +300,62 @@ export function UsdtSettingsFields() {
                   {t(
                     "Enter your BSC provider's HTTPS RPC URL. Leave blank to keep the saved URL; its capabilities are checked before enabling."
                   )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </SettingsFormGrid>
+      </SettingsControlGroup>
+
+      <SettingsControlGroup
+        role='group'
+        aria-label='Ethereum (ERC-20)'
+        className='space-y-5 p-4 sm:p-5'
+      >
+        <h4 className='font-medium'>Ethereum (ERC-20)</h4>
+        <FormField
+          control={form.control}
+          name='UsdtEthEnabled'
+          render={({ field }) => (
+            <SettingsSwitchItem>
+              <SettingsSwitchContent>
+                <FormLabel>{t('Enable Ethereum (ERC-20) USDT')}</FormLabel>
+                <FormDescription>
+                  {t('Save an Ethereum address and lookup URL before enabling. Payments are credited after final confirmation.')}
+                </FormDescription>
+              </SettingsSwitchContent>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </SettingsSwitchItem>
+          )}
+        />
+        <SettingsFormGrid>
+          <FormField
+            control={form.control}
+            name='UsdtEthReceiveAddress'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Ethereum receive address')}</FormLabel>
+                <FormControl>
+                  <Input placeholder='0x…' autoComplete='off' {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='UsdtEthRpcURL'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Ethereum payment lookup URL')}</FormLabel>
+                <FormControl>
+                  <Input type='password' autoComplete='new-password' placeholder='https://…' {...field} />
+                </FormControl>
+                <FormDescription>
+                  {t('Enter an Ethereum mainnet HTTPS RPC URL. Leave blank to keep the saved URL.')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

@@ -108,3 +108,38 @@ test('all seven languages render the BSC amount, fee and address instructions in
     }
   }
 })
+
+test('an expired Ethereum order checks only the ETH endpoint and retains retry after pending', async () => {
+  const address = '0x3932af6fdbc450446bdb4eb4d2d13335c42a0417'
+  const txHash = `0x${'a'.repeat(64)}`
+  const paid = vi.fn()
+  const post = vi
+    .spyOn(api, 'post')
+    .mockResolvedValueOnce({ data: { message: 'pending', data: 'pending' } })
+    .mockResolvedValueOnce({ data: { message: 'success', data: 'credited' } })
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <UsdtPaymentDialog
+        order={{ trade_no: 'eth-order', address, amount: 20.137, credited_amount: 20.137, network: 'ETH', expire_time: 1 }}
+        onClose={() => {}}
+        onPaid={paid}
+      />
+    </QueryClientProvider>
+  )
+  expect(screen.queryByText(address)).not.toBeInTheDocument()
+  const user = userEvent.setup()
+  const button = screen.getByRole('button', { name: 'Check payment status' })
+  await user.click(button)
+  expect(post).not.toHaveBeenCalled()
+  await user.type(screen.getByLabelText('Transaction hash'), txHash)
+  await user.click(button)
+  expect(await screen.findByRole('status')).toHaveTextContent('Payment not confirmed yet')
+  expect(paid).not.toHaveBeenCalled()
+  await user.click(button)
+  await waitFor(() => expect(paid).toHaveBeenCalledOnce())
+  expect(post).toHaveBeenCalledTimes(2)
+  expect(post).toHaveBeenLastCalledWith('/api/user/usdt/eth/check', {
+    trade_no: 'eth-order',
+    tx_hash: txHash,
+  })
+})

@@ -39,6 +39,7 @@ func usdtFixture(t *testing.T) {
 	oldDB, oldLog, oldTransport := model.DB, model.LOG_DB, http.DefaultTransport
 	oldConfig := setting.GetUsdtConfig()
 	oldBsc := setting.GetUsdtNetworkConfig("BSC")
+	oldEth := setting.GetUsdtNetworkConfig("ETH")
 	oldPayment := *operation_setting.GetPaymentSetting()
 	oldQuota, oldReward := common.QuotaPerUnit, common.InviterTopUpRewardRatio
 	oldRedis := common.RedisEnabled
@@ -75,6 +76,7 @@ func usdtFixture(t *testing.T) {
 	setting.UsdtTrongridApiKey = t.Name()
 	setting.UsdtMinTopUp, setting.UsdtOrderExpireTime = 10, 1800
 	setting.UsdtBscEnabled, setting.UsdtBscReceiveAddress, setting.UsdtBscRpcURL = false, "", ""
+	setting.UsdtEthEnabled, setting.UsdtEthReceiveAddress, setting.UsdtEthRpcURL = false, "", ""
 	t.Cleanup(func() {
 		require.NoError(t, db.Migrator().DropTable(&model.User{}, &model.TopUp{}, &model.Log{}, &model.Option{}))
 		common.OptionMap = oldOptions
@@ -86,6 +88,7 @@ func usdtFixture(t *testing.T) {
 		setting.UsdtTrongridApiKey = oldConfig.APIKey
 		setting.UsdtMinTopUp, setting.UsdtOrderExpireTime = oldConfig.MinTopUp, oldConfig.OrderExpireTime
 		setting.UsdtBscEnabled, setting.UsdtBscReceiveAddress, setting.UsdtBscRpcURL = oldBsc.Enabled, oldBsc.Address, oldBsc.RPCURL
+		setting.UsdtEthEnabled, setting.UsdtEthReceiveAddress, setting.UsdtEthRpcURL = oldEth.Enabled, oldEth.Address, oldEth.RPCURL
 		sqlDB.Close()
 		common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	})

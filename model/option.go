@@ -106,6 +106,9 @@ func InitOptionMap() {
 	common.OptionMap["UsdtBscEnabled"] = strconv.FormatBool(setting.UsdtBscEnabled)
 	common.OptionMap["UsdtBscReceiveAddress"] = setting.UsdtBscReceiveAddress
 	common.OptionMap["UsdtBscRpcURL"] = setting.UsdtBscRpcURL
+	common.OptionMap["UsdtEthEnabled"] = strconv.FormatBool(setting.UsdtEthEnabled)
+	common.OptionMap["UsdtEthReceiveAddress"] = setting.UsdtEthReceiveAddress
+	common.OptionMap["UsdtEthRpcURL"] = setting.UsdtEthRpcURL
 	common.OptionMap["UsdtMinTopUp"] = strconv.Itoa(setting.UsdtMinTopUp)
 	common.OptionMap["UsdtReceiveAddress"] = setting.UsdtReceiveAddress
 	common.OptionMap["UsdtTrongridApiKey"] = setting.UsdtTrongridApiKey
@@ -604,6 +607,12 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.UsdtBscReceiveAddress = strings.ToLower(value)
 	case "UsdtBscRpcURL":
 		setting.UsdtBscRpcURL = value
+	case "UsdtEthEnabled":
+		setting.UsdtEthEnabled = value == "true"
+	case "UsdtEthReceiveAddress":
+		setting.UsdtEthReceiveAddress = strings.ToLower(value)
+	case "UsdtEthRpcURL":
+		setting.UsdtEthRpcURL = value
 	case "UsdtMinTopUp":
 		setting.UsdtMinTopUp, _ = strconv.Atoi(value)
 	case "UsdtReceiveAddress":

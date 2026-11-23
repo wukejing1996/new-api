@@ -183,6 +183,9 @@ const paymentSchema = z.object({
   UsdtBscEnabled: z.boolean(),
   UsdtBscReceiveAddress: z.string(),
   UsdtBscRpcURL: z.string(),
+  UsdtEthEnabled: z.boolean(),
+  UsdtEthReceiveAddress: z.string(),
+  UsdtEthRpcURL: z.string(),
   UsdtMinTopUp: z.coerce
     .number({ error: 'Enter a valid number.' })
     .int('Enter a whole number.')
@@ -543,6 +546,8 @@ export function PaymentSettingsSection({
       'UsdtReceiveAddress',
       'UsdtBscReceiveAddress',
       'UsdtBscRpcURL',
+      'UsdtEthReceiveAddress',
+      'UsdtEthRpcURL',
       'UsdtMinTopUp',
       'UsdtNetwork',
       'UsdtCheckInterval',
@@ -550,10 +555,11 @@ export function PaymentSettingsSection({
       'UsdtTrongridApiKey',
       'UsdtEnabled',
       'UsdtBscEnabled',
+      'UsdtEthEnabled',
     ] as const) {
       const raw = values[key]
       const value = typeof raw === 'string' ? raw.trim() : raw
-      if ((key === 'UsdtTrongridApiKey' || key === 'UsdtBscRpcURL') && !value) continue
+      if ((key === 'UsdtTrongridApiKey' || key === 'UsdtBscRpcURL' || key === 'UsdtEthRpcURL') && !value) continue
       if (value !== initialRef.current[key]) updates.push({ key, value })
     }
 

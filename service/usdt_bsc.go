@@ -22,6 +22,11 @@ import (
 
 const bscTransferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
+var (
+	errEvmRPCNoResult    = errors.New("RPC result is unavailable")
+	errEvmRPCRateLimited = errors.New("RPC returned HTTP 429")
+)
+
 type bscBlock struct {
 	Number    string `json:"number"`
 	Hash      string `json:"hash"`
@@ -48,8 +53,12 @@ type bscReceipt struct {
 }
 
 func bscRPC(ctx context.Context, endpoint, method string, params any, result any) error {
+	return evmRPC(ctx, "BSC", endpoint, method, params, result)
+}
+
+func evmRPC(ctx context.Context, network, endpoint, method string, params any, result any) error {
 	if !setting.ValidBscRPCURL(endpoint) {
-		return errors.New("configure a BSC HTTPS RPC URL")
+		return fmt.Errorf("configure a %s HTTPS RPC URL", network)
 	}
 	body, err := common.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 	if err != nil {
@@ -57,16 +66,19 @@ func bscRPC(ctx context.Context, endpoint, method string, params any, result any
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return errors.New("invalid BSC RPC request")
+		return fmt.Errorf("invalid %s RPC request", network)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := usdtHTTPClient.Do(req)
 	if err != nil {
-		return errors.New("BSC RPC connection failed")
+		return fmt.Errorf("%s RPC connection failed", network)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("%s %w", network, errEvmRPCRateLimited)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("BSC RPC returned HTTP %d", resp.StatusCode)
+		return fmt.Errorf("%s RPC returned HTTP %d", network, resp.StatusCode)
 	}
 	var envelope struct {
 		Version string          `json:"jsonrpc"`
@@ -77,15 +89,21 @@ func bscRPC(ctx context.Context, endpoint, method string, params any, result any
 		} `json:"error"`
 	}
 	if err := common.DecodeJson(io.LimitReader(resp.Body, 4<<20), &envelope); err != nil {
-		return errors.New("invalid BSC RPC response")
+		return fmt.Errorf("invalid %s RPC response", network)
 	}
 	if envelope.Error != nil {
-		return fmt.Errorf("BSC RPC %s failed (%d)", method, envelope.Error.Code)
+		return fmt.Errorf("%s RPC %s failed (%d)", network, method, envelope.Error.Code)
 	}
-	if envelope.ID != 1 || envelope.Version != "2.0" || len(envelope.Result) == 0 || string(envelope.Result) == "null" {
-		return errors.New("BSC RPC result is unavailable")
+	if envelope.ID != 1 || envelope.Version != "2.0" || len(envelope.Result) == 0 {
+		return fmt.Errorf("invalid %s RPC response", network)
 	}
-	return common.Unmarshal(envelope.Result, result)
+	if string(envelope.Result) == "null" {
+		return fmt.Errorf("%s %w", network, errEvmRPCNoResult)
+	}
+	if err := common.Unmarshal(envelope.Result, result); err != nil {
+		return fmt.Errorf("invalid %s RPC result", network)
+	}
+	return nil
 }
 
 func bscQuantity(value string) (int64, error) {
@@ -108,19 +126,23 @@ func bscHash(value string) bool {
 }
 
 func bscHeader(ctx context.Context, endpoint, tag string) (bscBlock, int64, int64, error) {
+	return evmHeader(ctx, "BSC", endpoint, tag)
+}
+
+func evmHeader(ctx context.Context, network, endpoint, tag string) (bscBlock, int64, int64, error) {
 	var block bscBlock
-	if err := bscRPC(ctx, endpoint, "eth_getBlockByNumber", []any{tag, false}, &block); err != nil {
+	if err := evmRPC(ctx, network, endpoint, "eth_getBlockByNumber", []any{tag, false}, &block); err != nil {
 		return block, 0, 0, err
 	}
 	number, err := bscQuantity(block.Number)
 	stamp, stampErr := bscQuantity(block.Timestamp)
 	if err != nil || stampErr != nil || stamp <= 0 || !bscHash(block.Hash) {
-		return block, 0, 0, errors.New("invalid BSC block")
+		return block, 0, 0, fmt.Errorf("invalid %s block", network)
 	}
 	if strings.HasPrefix(tag, "0x") {
 		requested, err := bscQuantity(tag)
 		if err != nil || requested != number {
-			return block, 0, 0, errors.New("BSC returned the wrong block")
+			return block, 0, 0, fmt.Errorf("%s returned the wrong block", network)
 		}
 	}
 	return block, number, stamp, nil

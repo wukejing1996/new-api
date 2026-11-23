@@ -275,6 +275,9 @@ export type BillingSettings = {
   UsdtBscEnabled: boolean
   UsdtBscReceiveAddress: string
   UsdtBscRpcURL: string
+  UsdtEthEnabled: boolean
+  UsdtEthReceiveAddress: string
+  UsdtEthRpcURL: string
   UsdtMinTopUp: number
   UsdtReceiveAddress: string
   UsdtTrongridApiKey: string

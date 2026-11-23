@@ -224,3 +224,8 @@ export function mergePresetAmounts(
     discount: discounts[amount] || 1.0,
   }))
 }
+export function getUsdtNetworkLabel(network?: string): string {
+  if (network === 'ETH') return 'Ethereum (ERC-20)'
+  if (network === 'BSC') return 'BSC (BEP20)'
+  return !network || network === 'TRC20' ? 'TRON (TRC20)' : network
+}

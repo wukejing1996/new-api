@@ -102,7 +102,7 @@ func GetTopUpInfo(c *gin.Context) {
 	usdtConfig := setting.GetUsdtConfig()
 	usdtNetworks := []string{}
 	if enableUsdt {
-		for _, network := range []string{"TRC20", "BSC"} {
+		for _, network := range []string{"TRC20", "BSC", "ETH"} {
 			if setting.GetUsdtNetworkConfig(network).Available() {
 				usdtNetworks = append(usdtNetworks, network)
 			}

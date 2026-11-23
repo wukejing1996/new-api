@@ -91,7 +91,7 @@ func GetOptions(c *gin.Context) {
 		}
 		value := common.Interface2String(v)
 		isSensitiveKey := strings.HasSuffix(k, "Token") ||
-			k == "UsdtBscRpcURL" ||
+			k == "UsdtBscRpcURL" || k == "UsdtEthRpcURL" ||
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
@@ -439,6 +439,17 @@ func UpdateOption(c *gin.Context) {
 		}
 		if _, checkErr := service.ValidateBscProvider(c.Request.Context(), endpoint); checkErr != nil {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": checkErr.Error()})
+			return
+		}
+	}
+	if (option.Key == "UsdtEthEnabled" && option.Value.(string) == "true") || option.Key == "UsdtEthRpcURL" {
+		endpoint := setting.GetUsdtNetworkConfig("ETH").RPCURL
+		if option.Key == "UsdtEthRpcURL" {
+			endpoint = option.Value.(string)
+		}
+		if err := service.ValidateEthProvider(c.Request.Context(), endpoint); err != nil {
+			common.SysLog("Ethereum RPC configuration validation failed: " + err.Error())
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Unable to validate the Ethereum RPC. Check the URL and its network."})
 			return
 		}
 	}
