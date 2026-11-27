@@ -1086,7 +1086,7 @@ func rechargeUsdt(tradeNo, txHash string, ethBlock *EthUsdtBlockProof, logIndex 
 		syncCreditUserQuotaCache(topUp.UserId, quotaToAdd, "usdt topup")
 		RecordLog(topUp.UserId, LogTypeTopup, common.NewMessage("USDT top-up: quota {{quota}}, paid {{amount}} USDT, tx {{tx}}", map[string]any{"quota": logger.FormatQuota(quotaToAdd), "amount": fmt.Sprintf("%.3f", topUp.Money), "tx": txHash}))
 		if ethBlock != nil {
-			common.SysLog(fmt.Sprintf("Finalized Ethereum USDT payment: order=%s chain_id=1 tx=%s log_index=%d block=%d block_hash=%s", tradeNo, txHash, logIndex[0], ethBlock.Number, ethBlock.Hash))
+			common.SysLog(fmt.Sprintf("Ethereum USDT payment credited: order=%s chain_id=1 tx=%s log_index=%d block=%d block_hash=%s", tradeNo, txHash, logIndex[0], ethBlock.Number, ethBlock.Hash))
 		}
 		RewardInviterForStripeTopUp(topUp.UserId, topUp.Id, topUp.Money)
 	}

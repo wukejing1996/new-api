@@ -27,7 +27,7 @@ func TestUsdtEthConfigurationAndPublishedNetwork(t *testing.T) {
 	endpoint := "https://example.com/eth-config"
 	require.NoError(t, model.UpdateOption("UsdtEthRpcURL", endpoint))
 
-	chainID, precision, finalized := "0x1", "0x6", true
+	chainID, precision, finalizedSupported := "0x1", "0x6", false
 	bscFixture(t, func(method string, params []any) any {
 		switch method {
 		case "eth_chainId":
@@ -38,7 +38,7 @@ func TestUsdtEthConfigurationAndPublishedNetwork(t *testing.T) {
 		case "eth_call":
 			return precision
 		case "eth_getBlockByNumber":
-			if params[0] == "finalized" && !finalized {
+			if params[0] == "finalized" && !finalizedSupported {
 				return nil
 			}
 			return map[string]string{"number": "0x64", "hash": "0x" + strings.Repeat("a", 64), "timestamp": fmt.Sprintf("0x%x", time.Now().Unix())}
@@ -52,8 +52,8 @@ func TestUsdtEthConfigurationAndPublishedNetwork(t *testing.T) {
 	require.Error(t, service.ValidateEthProvider(context.Background(), endpoint))
 	chainID, precision = "0x1", "0x12"
 	require.Error(t, service.ValidateEthProvider(context.Background(), endpoint))
-	precision, finalized = "0x6", false
-	require.Error(t, service.ValidateEthProvider(context.Background(), endpoint))
+	precision, finalizedSupported = "0x6", false
+	require.NoError(t, service.ValidateEthProvider(context.Background(), endpoint))
 
 	require.NoError(t, model.UpdateOption("UsdtEthEnabled", "true"))
 	info := usdtRequest(t, GetTopUpInfo, 1, "{}")["data"].(map[string]any)
@@ -81,7 +81,7 @@ func TestUsdtEthReceiptVerification(t *testing.T) {
 	for _, scenario := range []struct{ name, result string }{
 		{"valid after order expiration", "success"},
 		{"pending receipt", "pending"},
-		{"not finalized", "pending"},
+		{"canonical before finalized", "success"},
 		{"noncanonical", "pending"},
 		{"wrong chain", "error"},
 		{"wrong recipient", "error"},
@@ -119,7 +119,7 @@ func TestUsdtEthReceiptVerification(t *testing.T) {
 			}
 			logs := []any{entry}
 			switch scenario.name {
-			case "not finalized":
+			case "canonical before finalized":
 				finalized = "0x64"
 			case "wrong chain":
 				chainID = "0x38"
@@ -172,9 +172,12 @@ func TestUsdtEthReceiptVerification(t *testing.T) {
 			assert.Empty(t, calls)
 			assert.Equal(t, scenario.result, usdtRequest(t, CheckEthUsdtPayment, 1, body)["message"])
 			require.NotEmpty(t, calls)
-			assert.Equal(t, "eth_getTransactionReceipt", calls[0])
+			assert.Equal(t, "eth_chainId", calls[0])
+			if len(calls) > 1 {
+				assert.Equal(t, "eth_getTransactionReceipt", calls[1])
+			}
 			if scenario.name == "pending receipt" || scenario.name == "wrong amount" || scenario.name == "failed receipt" {
-				assert.Len(t, calls, 1)
+				assert.Len(t, calls, 2)
 			}
 			stored := model.GetTopUpByTradeNo(order.TradeNo)
 			var user model.User

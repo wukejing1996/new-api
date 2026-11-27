@@ -25,6 +25,7 @@ const bscTransferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f5
 var (
 	errEvmRPCNoResult    = errors.New("RPC result is unavailable")
 	errEvmRPCRateLimited = errors.New("RPC returned HTTP 429")
+	errEvmRPCUnavailable = errors.New("RPC is temporarily unavailable")
 )
 
 type bscBlock struct {
@@ -71,11 +72,14 @@ func evmRPC(ctx context.Context, network, endpoint, method string, params any, r
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := usdtHTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%s RPC connection failed", network)
+		return fmt.Errorf("%s %w", network, errEvmRPCUnavailable)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return fmt.Errorf("%s %w", network, errEvmRPCRateLimited)
+	}
+	if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode >= http.StatusInternalServerError {
+		return fmt.Errorf("%s %w (HTTP %d)", network, errEvmRPCUnavailable, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s RPC returned HTTP %d", network, resp.StatusCode)
@@ -85,13 +89,17 @@ func evmRPC(ctx context.Context, network, endpoint, method string, params any, r
 		ID      int             `json:"id"`
 		Result  json.RawMessage `json:"result"`
 		Error   *struct {
-			Code int `json:"code"`
+			Code    int    `json:"code"`
+			Message string `json:"message"`
 		} `json:"error"`
 	}
 	if err := common.DecodeJson(io.LimitReader(resp.Body, 4<<20), &envelope); err != nil {
 		return fmt.Errorf("invalid %s RPC response", network)
 	}
 	if envelope.Error != nil {
+		if envelope.Error.Code == http.StatusTooManyRequests || envelope.Error.Code == -32005 || strings.Contains(strings.ToLower(envelope.Error.Message), "rate limit") {
+			return fmt.Errorf("%s %w", network, errEvmRPCRateLimited)
+		}
 		return fmt.Errorf("%s RPC %s failed (%d)", network, method, envelope.Error.Code)
 	}
 	if envelope.ID != 1 || envelope.Version != "2.0" || len(envelope.Result) == 0 {

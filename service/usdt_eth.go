@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math/big"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,17 +14,6 @@ import (
 )
 
 var ErrEthUsdtPending = errors.New("Ethereum payment not confirmed yet")
-
-// An older finalized height can only defer a payment. A changed RPC URL must be verified again.
-var ethFinalityCache struct {
-	sync.Mutex
-	endpoint string
-	block    bscBlock
-	height   int64
-	stamp    int64
-	readAt   time.Time
-	chainAt  time.Time
-}
 
 func checkEthChain(ctx context.Context, endpoint string) error {
 	var chain string
@@ -66,52 +54,7 @@ func ValidateEthProvider(ctx context.Context, endpoint string) error {
 	if latest <= 0 || latestStamp < now.Unix()-120 || latestStamp > now.Unix()+30 {
 		return errors.New("Ethereum RPC is not synchronized")
 	}
-	block, height, stamp, err := evmHeader(ctx, "Ethereum", endpoint, "finalized")
-	if err != nil {
-		return err
-	}
-	if height <= 0 || height > latest || stamp > latestStamp {
-		return errors.New("invalid Ethereum finalized block")
-	}
-	ethFinalityCache.Lock()
-	ethFinalityCache.endpoint, ethFinalityCache.block, ethFinalityCache.height, ethFinalityCache.stamp = endpoint, block, height, stamp
-	ethFinalityCache.readAt, ethFinalityCache.chainAt = now, now
-	ethFinalityCache.Unlock()
 	return nil
-}
-
-func ethFinalizedBlock(ctx context.Context, endpoint string) (bscBlock, int64, int64, error) {
-	ethFinalityCache.Lock()
-	matches := ethFinalityCache.endpoint == endpoint
-	if matches && time.Since(ethFinalityCache.readAt) < 15*time.Second {
-		block, height, stamp := ethFinalityCache.block, ethFinalityCache.height, ethFinalityCache.stamp
-		ethFinalityCache.Unlock()
-		return block, height, stamp, nil
-	}
-	var chainAt time.Time
-	if matches {
-		chainAt = ethFinalityCache.chainAt
-	}
-	ethFinalityCache.Unlock()
-
-	if time.Since(chainAt) >= time.Minute {
-		if err := checkEthChain(ctx, endpoint); err != nil {
-			return bscBlock{}, 0, 0, err
-		}
-		chainAt = time.Now()
-	}
-	block, height, stamp, err := evmHeader(ctx, "Ethereum", endpoint, "finalized")
-	if err != nil {
-		return bscBlock{}, 0, 0, err
-	}
-	if height <= 0 || stamp > time.Now().Unix()+30 {
-		return bscBlock{}, 0, 0, errors.New("invalid Ethereum finalized block")
-	}
-	ethFinalityCache.Lock()
-	ethFinalityCache.endpoint, ethFinalityCache.block, ethFinalityCache.height, ethFinalityCache.stamp = endpoint, block, height, stamp
-	ethFinalityCache.readAt, ethFinalityCache.chainAt = time.Now(), chainAt
-	ethFinalityCache.Unlock()
-	return block, height, stamp, nil
 }
 
 func CheckEthUsdtPayment(ctx context.Context, order *model.TopUp, txHash string) error {
@@ -134,9 +77,12 @@ func CheckEthUsdtPayment(ctx context.Context, order *model.TopUp, txHash string)
 	}
 
 	endpoint := setting.GetUsdtNetworkConfig("ETH").RPCURL
+	if err := checkEthChain(ctx, endpoint); err != nil {
+		return err
+	}
 	var receipt bscReceipt
 	if err := evmRPC(ctx, "Ethereum", endpoint, "eth_getTransactionReceipt", []any{canonicalHash}, &receipt); err != nil {
-		if errors.Is(err, errEvmRPCNoResult) || errors.Is(err, errEvmRPCRateLimited) {
+		if errors.Is(err, errEvmRPCNoResult) || errors.Is(err, errEvmRPCRateLimited) || errors.Is(err, errEvmRPCUnavailable) {
 			return ErrEthUsdtPending
 		}
 		return err
@@ -155,24 +101,12 @@ func CheckEthUsdtPayment(ctx context.Context, order *model.TopUp, txHash string)
 		return err
 	}
 
-	block, finalizedHeight, stamp, err := ethFinalizedBlock(ctx, endpoint)
+	block, _, stamp, err := evmHeader(ctx, "Ethereum", endpoint, receipt.BlockNumber)
 	if err != nil {
-		if errors.Is(err, errEvmRPCNoResult) || errors.Is(err, errEvmRPCRateLimited) {
+		if errors.Is(err, errEvmRPCNoResult) || errors.Is(err, errEvmRPCRateLimited) || errors.Is(err, errEvmRPCUnavailable) {
 			return ErrEthUsdtPending
 		}
 		return err
-	}
-	if height > finalizedHeight {
-		return ErrEthUsdtPending
-	}
-	if height != finalizedHeight {
-		block, _, stamp, err = evmHeader(ctx, "Ethereum", endpoint, receipt.BlockNumber)
-		if err != nil {
-			if errors.Is(err, errEvmRPCNoResult) || errors.Is(err, errEvmRPCRateLimited) {
-				return ErrEthUsdtPending
-			}
-			return err
-		}
 	}
 	if !strings.EqualFold(block.Hash, receipt.BlockHash) {
 		return ErrEthUsdtPending
